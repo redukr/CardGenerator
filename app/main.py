@@ -8,9 +8,10 @@ from PySide6.QtWidgets import (
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtCore import QFile, QIODevice
 
-# ──────────────────────────────────────────────────────────────
-# Завантаження CONFIG
-# ──────────────────────────────────────────────────────────────
+from core.json_loader import JSONLoader
+from core.renderer import CardRenderer
+from core.pdf_exporter import PDFExporter
+
 
 def load_config():
     config_path = os.path.join(os.path.dirname(__file__), "config.json")
@@ -27,15 +28,10 @@ def save_config(cfg):
         json.dump(cfg, f, indent=4, ensure_ascii=False)
 
 
-# ──────────────────────────────────────────────────────────────
-# Головне вікно
-# ──────────────────────────────────────────────────────────────
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        # Завантаження UI
         ui_path = os.path.join(os.path.dirname(__file__), "ui", "main_window.ui")
         loader = QUiLoader()
         ui_file = QFile(ui_path)
@@ -48,22 +44,16 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(self.ui)
 
-        # Конфіг
         self.config = load_config()
 
-        # Прив’язуємо кнопки
         self.connect_buttons()
 
-        # Статус інтерфейсу
         self.current_deck = None
         self.current_deck_path = None
 
         self.setWindowTitle("CardGenerator — Alpha Build")
         self.resize(1400, 900)
 
-    # ────────────────────────────────────────────────────────
-    # ПРИВ’ЯЗКА КНОПОК
-    # ────────────────────────────────────────────────────────
     def connect_buttons(self):
         try:
             self.ui.btnLoadJSON.clicked.connect(self.load_json_deck)
@@ -71,14 +61,10 @@ class MainWindow(QMainWindow):
             self.ui.btnGeneratePreview.clicked.connect(self.generate_preview)
             self.ui.btnGenerateSet.clicked.connect(self.generate_set)
             self.ui.btnGeneratePDF.clicked.connect(self.generate_pdf)
-
         except Exception as e:
-            print("⚠ UI кнопки не знайдено — переконайся, що назви збігаються у main_window.ui")
+            print("⚠ UI кнопки не знайдено:")
             print(e)
 
-    # ────────────────────────────────────────────────────────
-    # ВИБІР ДИРЕКТОРІЇ WORKSPACE
-    # ────────────────────────────────────────────────────────
     def set_workspace(self):
         folder = QFileDialog.getExistingDirectory(self, "Обрати директорію workspace")
         if folder:
@@ -86,9 +72,6 @@ class MainWindow(QMainWindow):
             save_config(self.config)
             QMessageBox.information(self, "OK", f"Workspace встановлено:\n{folder}")
 
-    # ────────────────────────────────────────────────────────
-    # ЗАВАНТАЖЕННЯ JSON КОЛОДИ
-    # ────────────────────────────────────────────────────────
     def load_json_deck(self):
         path, _ = QFileDialog.getOpenFileName(self, "Обрати JSON колоду", "", "JSON Files (*.json)")
         if not path:
@@ -107,28 +90,99 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Помилка", f"JSON не вдалося прочитати:\n{str(e)}")
 
-    # ────────────────────────────────────────────────────────
-    # ГЕНЕРАЦІЯ ПРЕВ'Ю (заглушка)
-    # ────────────────────────────────────────────────────────
+    # ---------------------------
+    # Generate Preview
+    # ---------------------------
     def generate_preview(self):
-        QMessageBox.information(self, "Preview", "Генерація прев’ю буде реалізована в renderer.py")
+        if not self.current_deck_path:
+            QMessageBox.warning(self, "Помилка", "Завантаж JSON колоди.")
+            return
 
-    # ────────────────────────────────────────────────────────
-    # ГЕНЕРАЦІЯ ПОВНОГО НАБОРУ (заглушка)
-    # ────────────────────────────────────────────────────────
+        loader = JSONLoader(self.current_deck_path)
+        deck = loader.load()
+
+        if not deck["cards"]:
+            QMessageBox.warning(self, "Помилка", "У колоді немає карт.")
+            return
+
+        card = deck["cards"][0]
+        deck_color = deck["deck_color"]
+
+        renderer = CardRenderer(
+            template_path=os.path.join(os.path.dirname(__file__), "template.json"),
+            frame_path=os.path.join(os.path.dirname(__file__), "..", "frames", "base_frame.png"),
+            fonts_folder=os.path.join(os.path.dirname(__file__), "..", "fonts")
+        )
+
+        img = renderer.render_card(card, deck_color)
+        out_path = os.path.join(os.path.dirname(__file__), "..", "exports", "preview.png")
+        renderer.save_png(img, out_path)
+
+        QMessageBox.information(self, "OK", f"Прев’ю створено:\n{out_path}")
+
+    # ---------------------------
+    # Generate Set
+    # ---------------------------
     def generate_set(self):
-        QMessageBox.information(self, "Generate Set", "Генерація PNG буде реалізована в renderer.py")
+        if not self.current_deck_path:
+            QMessageBox.warning(self, "Помилка", "Завантаж JSON колоди.")
+            return
 
-    # ────────────────────────────────────────────────────────
-    # ГЕНЕРАЦІЯ PDF (заглушка)
-    # ────────────────────────────────────────────────────────
+        loader = JSONLoader(self.current_deck_path)
+        deck = loader.load()
+        cards = deck["cards"]
+        deck_color = deck["deck_color"]
+
+        renderer = CardRenderer(
+            template_path=os.path.join(os.path.dirname(__file__), "template.json"),
+            frame_path=os.path.join(os.path.dirname(__file__), "..", "frames", "base_frame.png"),
+            fonts_folder=os.path.join(os.path.dirname(__file__), "..", "fonts")
+        )
+
+        export_dir = self.config.get("workspace", "")
+        if not export_dir:
+            QMessageBox.warning(self, "Помилка", "Workspace не встановлено.")
+            return
+
+        os.makedirs(export_dir, exist_ok=True)
+
+        for card in cards:
+            img = renderer.render_card(card, deck_color)
+            filename = f"{card['name']}.png".replace(" ", "_")
+            out_path = os.path.join(export_dir, filename)
+            renderer.save_png(img, out_path)
+
+        QMessageBox.information(self, "OK", f"Набір PNG створено:\n{export_dir}")
+
+    # ---------------------------
+    # Generate PDF
+    # ---------------------------
     def generate_pdf(self):
-        QMessageBox.information(self, "PDF", "Експорт у PDF буде реалізовано у pdf_exporter.py")
+        if not self.current_deck_path:
+            QMessageBox.warning(self, "Помилка", "Завантаж JSON колоди.")
+            return
 
+        export_dir = self.config.get("workspace", "")
+        if not export_dir:
+            QMessageBox.warning(self, "Помилка", "Workspace не встановлено.")
+            return
 
-# ──────────────────────────────────────────────────────────────
-# Головний запуск
-# ──────────────────────────────────────────────────────────────
+        images = [
+            os.path.join(export_dir, f)
+            for f in os.listdir(export_dir)
+            if f.lower().endswith(".png")
+        ]
+
+        if not images:
+            QMessageBox.warning(self, "Помилка", "У Workspace немає PNG.")
+            return
+
+        pdf_path = os.path.join(export_dir, "cards.pdf")
+        exporter = PDFExporter()
+        exporter.export_pdf(images, pdf_path)
+
+        QMessageBox.information(self, "OK", f"PDF створено:\n{pdf_path}")
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
