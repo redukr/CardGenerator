@@ -2,17 +2,18 @@
 
 import os
 
+# Поточна директорія (app/)
 project_path = os.getcwd()
 
 datas = []
 
-# Include folders
+# ВСІ ПАПКИ, ЯКІ ПОТРІБНО ВКЛЮЧИТИ У EXE
 for folder in ["ui", "core", "widgets", "frames", "icons", "fonts", "decks"]:
-    full_path = os.path.join(project_path, folder)
-    if os.path.isdir(full_path):
-        datas.append((full_path, folder))
+    full_dir = os.path.join(project_path, folder)
+    if os.path.isdir(full_dir):
+        datas.append((full_dir, folder))
 
-# Include individual files
+# Окремі файли
 datas.append((os.path.join(project_path, "template.json"), "."))
 datas.append((os.path.join(project_path, "config.json"), "."))
 
