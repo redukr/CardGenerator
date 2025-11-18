@@ -1,0 +1,40 @@
+{
+  "deck_color": "#4466AA",
+
+  "prompts": {
+    "unit": "{name}, Ukrainian soldier. Comic style 'Воля': thick lines, muted palette.",
+    "tactic": "Tactical diagram for: {name}. Simple arrows, no characters.",
+    "event": "Comic-style event: {name}.",
+    "equipment": "Equipment: {name}, drawn in 'Воля' style.",
+    "thematic": "Thematic symbol: {name}, graphic novel style."
+  },
+
+  "cards": [
+    {
+      "name": "Тестовий боєць",
+      "type": "unit",
+      "cost": 1,
+      "cost_type": "BF",
+      "atk": 2,
+      "def": 1,
+      "stb": 2,
+      "init": 3,
+      "rng": 1,
+      "move": 1
+    },
+
+    {
+      "name": "Тестова тактика",
+      "type": "tactic",
+      "cost": 1,
+      "cost_type": "CI"
+    },
+
+    {
+      "name": "Тестова подія",
+      "type": "event",
+      "cost": 0,
+      "cost_type": "BF"
+    }
+  ]
+}

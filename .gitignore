@@ -1,1 +1,34 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+env/
+
+# VSCode / PyCharm settings
+.vscode/
+.idea/
+
+# Mac / Windows system files
+.DS_Store
+Thumbs.db
+
+# Python build / packaging
+build/
+dist/
+*.egg-info/
+
+# Project output folders
+exports/
+arts/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
 

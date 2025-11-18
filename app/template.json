@@ -12,7 +12,7 @@
   "title": {
     "x_px": 60,
     "y_px": 40,
-    "font": "Montserrat.ttf",
+    "font": "LS_font.ttf",
     "size": 28,
     "color": "#FFFFFF"
   },
@@ -20,7 +20,7 @@
   "stats": {
     "x_px": 60,
     "y_px": 480,
-    "font": "Montserrat.ttf",
+    "font": "LS_font.ttf",
     "size": 26,
     "color": "#FFFFFF"
   },
@@ -35,7 +35,7 @@
   "cost_text": {
     "x_px": 330,
     "y_px": 40,
-    "font": "Montserrat.ttf",
+    "font": "LS_font.ttf",
     "size": 26,
     "color": "#FFFFFF"
   },

@@ -1,3 +1,8 @@
 {
-  "config": {}
+  "workspace": "",
+  "last_deck": "",
+  "use_json_color": true,
+  "manual_frame_color": "#FFFFFF",
+  "dpi": 300,
+  "bleed_mm": 0
 }
