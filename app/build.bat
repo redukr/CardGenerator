@@ -1,1 +1,1 @@
-python -m PyInstaller main.py
+..\python310\python.exe -m PyInstaller CardGenerator.spec

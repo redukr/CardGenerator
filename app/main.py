@@ -117,9 +117,9 @@ class MainWindow(QMainWindow):
         deck_color = deck["deck_color"]
 
         renderer = CardRenderer(
-            template_path=os.path.join(os.path.dirname(__file__), "template.json"),
-            frame_path=os.path.join(os.path.dirname(__file__), "..", "frames", "base_frame.png"),
-            fonts_folder=os.path.join(os.path.dirname(__file__), "..", "fonts")
+            template_path = resource_path("template.json")
+            frame_path    = resource_path("frames", "base_frame.png")
+            fonts_folder  = resource_path("fonts")
         )
 
         img = renderer.render_card(card, deck_color)
@@ -142,9 +142,9 @@ class MainWindow(QMainWindow):
         deck_color = deck["deck_color"]
 
         renderer = CardRenderer(
-            template_path=os.path.join(os.path.dirname(__file__), "template.json"),
-            frame_path=os.path.join(os.path.dirname(__file__), "..", "frames", "base_frame.png"),
-            fonts_folder=os.path.join(os.path.dirname(__file__), "..", "fonts")
+            template_path = resource_path("template.json")
+            frame_path    = resource_path("frames", "base_frame.png")
+            fonts_folder  = resource_path("fonts")
         )
 
         export_dir = self.config.get("workspace", "")
