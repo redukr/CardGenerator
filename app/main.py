@@ -2,9 +2,38 @@ import sys
 import json
 import os
 
+import sys, os, traceback
+
+def exception_handler(exc_type, exc_value, exc_traceback):
+    """Записує всі помилки у error.txt поруч із EXE."""
+    # Шлях до error.txt поруч з exe
+    if hasattr(sys, '_MEIPASS'):
+        # Onefile: реальний exe лежить у sys.argv[0]
+        base = os.path.dirname(sys.argv[0])
+    else:
+        # IDE: поруч з main.py
+        base = os.path.dirname(os.path.abspath(__file__))
+
+    log_path = os.path.join(base, "error.txt")
+
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write("=== ERROR ===\n")
+        traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
+        f.write("\n")
+
+# Перехопити всі uncaught exceptions
+sys.excepthook = exception_handler
+
+
 def resource_path(*paths):
-    """Повертає правильний шлях до ресурсів і під час розробки, і в EXE."""
-    base_path = getattr(sys, '_MEIPASS', os.path.dirname(__file__))
+    """
+    Повертає шлях до ресурсів у режимі розробки і в PyInstaller (onefile).
+    У onefile PyInstaller розпаковує все безпосередньо в _MEIPASS.
+    """
+    if hasattr(sys, '_MEIPASS'):
+        base_path = sys._MEIPASS   # без _internal!
+    else:
+        base_path = os.path.dirname(__file__)
     return os.path.join(base_path, *paths)
 
 
@@ -40,14 +69,22 @@ class MainWindow(QMainWindow):
 
         ui_path = resource_path("ui", "main_window.ui")
         loader = QUiLoader()
-        ui_file = QFile(ui_path)
 
-        if not ui_file.open(QIODevice.ReadOnly):
-            raise FileNotFoundError(f"UI файл не знайдено: {ui_path}")
+        try:
+            with open(ui_path, "rb") as f:
+                ui_bytes = f.read()
 
-        self.ui = loader.load(ui_file, self)
-        ui_file.close()
+            self.ui = loader.loadFromData(ui_bytes, self)
 
+            if self.ui is None:
+                raise FileNotFoundError(f"Не вдалося завантажити UI: {ui_path}")
+
+        except Exception as e:
+            exception_handler(type(e), e, e.__traceback__)
+            raise
+
+        self.setCentralWidget(self.ui)
+                            
         self.setCentralWidget(self.ui)
 
         self.config = load_config()
@@ -191,6 +228,19 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == "__main__":
+    
+        # Лог старту
+    try:
+        if hasattr(sys, '_MEIPASS'):
+            base = os.path.dirname(sys.argv[0])
+        else:
+            base = os.path.dirname(os.path.abspath(__file__))
+
+        with open(os.path.join(base, "error.txt"), "a", encoding="utf-8") as f:
+            f.write("\n=== APP STARTED ===\n")
+    except:
+        pass
+
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()

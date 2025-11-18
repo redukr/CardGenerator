@@ -2,18 +2,17 @@
 
 import os
 
-# Поточна директорія (app/)
 project_path = os.getcwd()
 
 datas = []
 
-# ВСІ ПАПКИ, ЯКІ ПОТРІБНО ВКЛЮЧИТИ У EXE
+# Всі папки з ресурсами
 for folder in ["ui", "core", "widgets", "frames", "icons", "fonts", "decks"]:
-    full_dir = os.path.join(project_path, folder)
-    if os.path.isdir(full_dir):
-        datas.append((full_dir, folder))
+    full_path = os.path.join(project_path, folder)
+    if os.path.isdir(full_path):
+        datas.append((full_path, folder))
 
-# Окремі файли
+# Файли в корені app/
 datas.append((os.path.join(project_path, "template.json"), "."))
 datas.append((os.path.join(project_path, "config.json"), "."))
 
@@ -27,7 +26,7 @@ a = Analysis(
     hiddenimports=[],
     hookspath=[],
     runtime_hooks=[],
-    cipher=block_cipher,
+    cipher=block_cipher
 )
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
@@ -36,10 +35,9 @@ exe = EXE(
     pyz,
     a.scripts,
     [],
-    exclude_binaries=True,
+    exclude_binaries=False,
     name='CardGenerator',
     debug=False,
-    bootloader_ignore_signals=False,
     strip=False,
     upx=False,
     console=False
