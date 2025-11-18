@@ -1,65 +1,38 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-import os
-
-# Поточна робоча директорія (app/)
-project_path = os.getcwd()
-
-# Ресурси
-datas = [
-    (os.path.join(project_path, "template.json"), "app"),
-    (os.path.join(project_path, "config.json"), "app"),
-]
-
-resource_dirs = [
-    "ui",
-    "core",
-    "widgets",
-    "../frames",
-    "../icons",
-    "../fonts",
-    "../decks"
-]
-
-for folder in resource_dirs:
-    full_path = os.path.join(project_path, folder)
-    if os.path.isdir(full_path):
-        datas.append((full_path, folder))
-
-block_cipher = None
 
 a = Analysis(
     ['main.py'],
-    pathex=[project_path],
+    pathex=[],
     binaries=[],
-    datas=datas,
+    datas=[],
     hiddenimports=[],
     hookspath=[],
+    hooksconfig={},
     runtime_hooks=[],
-    cipher=block_cipher,
+    excludes=[],
+    noarchive=False,
+    optimize=0,
 )
-
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.datas,
     [],
-    exclude_binaries=True,
     name='CardGenerator',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,
-    console=False
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=False,
-    name='CardGenerator'
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
 )

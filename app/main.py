@@ -2,6 +2,14 @@ import sys
 import json
 import os
 
+import sys
+
+def resource_path(*paths):
+    """Повертає правильний шлях до ресурсів і під час розробки, і в EXE."""
+    base_path = getattr(sys, '_MEIPASS', os.path.dirname(__file__))
+    return os.path.join(base_path, *paths)
+
+
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QFileDialog, QMessageBox
 )
@@ -32,7 +40,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        ui_path = os.path.join(os.path.dirname(__file__), "ui", "main_window.ui")
+        ui_path = resource_path("ui", "main_window.ui")
         loader = QUiLoader()
         ui_file = QFile(ui_path)
 
