@@ -2,8 +2,6 @@ import sys
 import json
 import os
 
-import sys
-
 def resource_path(*paths):
     """Повертає правильний шлях до ресурсів і під час розробки, і в EXE."""
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(__file__))
@@ -22,7 +20,7 @@ from core.pdf_exporter import PDFExporter
 
 
 def load_config():
-    config_path = os.path.join(os.path.dirname(__file__), "config.json")
+    config_path = resource_path("config.json")
     if not os.path.exists(config_path):
         return {"workspace": "", "last_deck": "", "use_json_color": True}
 
@@ -31,7 +29,7 @@ def load_config():
 
 
 def save_config(cfg):
-    config_path = os.path.join(os.path.dirname(__file__), "config.json")
+    config_path = resource_path("config.json")
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=4, ensure_ascii=False)
 
@@ -117,8 +115,8 @@ class MainWindow(QMainWindow):
         deck_color = deck["deck_color"]
 
         renderer = CardRenderer(
-            template_path = resource_path("template.json")
-            frame_path    = resource_path("frames", "base_frame.png")
+            template_path = resource_path("template.json"),
+            frame_path    = resource_path("frames", "base_frame.png"),
             fonts_folder  = resource_path("fonts")
         )
 
@@ -142,8 +140,8 @@ class MainWindow(QMainWindow):
         deck_color = deck["deck_color"]
 
         renderer = CardRenderer(
-            template_path = resource_path("template.json")
-            frame_path    = resource_path("frames", "base_frame.png")
+            template_path = resource_path("template.json"),
+            frame_path    = resource_path("frames", "base_frame.png"),
             fonts_folder  = resource_path("fonts")
         )
 

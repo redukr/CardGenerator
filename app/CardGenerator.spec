@@ -1,38 +1,55 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
+
+project_path = os.getcwd()
+
+datas = []
+
+# Include folders
+for folder in ["ui", "core", "widgets", "frames", "icons", "fonts", "decks"]:
+    full_path = os.path.join(project_path, folder)
+    if os.path.isdir(full_path):
+        datas.append((full_path, folder))
+
+# Include individual files
+datas.append((os.path.join(project_path, "template.json"), "."))
+datas.append((os.path.join(project_path, "config.json"), "."))
+
+block_cipher = None
 
 a = Analysis(
     ['main.py'],
-    pathex=[],
+    pathex=[project_path],
     binaries=[],
-    datas=[],
+    datas=datas,
     hiddenimports=[],
     hookspath=[],
-    hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
-    noarchive=False,
-    optimize=0,
+    cipher=block_cipher,
 )
-pyz = PYZ(a.pure)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='CardGenerator',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=False,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
+    upx=False,
+    console=False
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    name='CardGenerator'
 )
