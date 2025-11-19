@@ -8,7 +8,15 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QPen, QBrush, QPainter, QPixmap, QFont
+from PySide6.QtGui import (
+    QColor,
+    QPen,
+    QBrush,
+    QPainter,
+    QPixmap,
+    QFont,
+    QImage,
+)
 from PySide6.QtWidgets import (
     QGraphicsItem,
     QGraphicsPixmapItem,
@@ -109,6 +117,56 @@ class CardSceneView(QGraphicsView):
             self.load_template(template_path)
 
     # ------------------------------------------------------------------
+    def apply_card_data(self, card: dict, deck_color: str):
+        """Populate scene items using card data from JSON."""
+        if not card:
+            return
+
+        if self.name_item:
+            self.name_item.setPlainText(card.get("name", ""))
+        if self.type_item:
+            self.type_item.setPlainText(card.get("type", ""))
+        if self.desc_item:
+            self.desc_item.setPlainText(card.get("description", ""))
+
+        stats_data = card.get("stats", {}) or {}
+        stats = ["atk", "def", "stb", "init", "rng", "move"]
+        for stat in stats:
+            item = self.stat_items.get(stat.upper())
+            if not item:
+                continue
+            value = stats_data.get(stat, stats_data.get(stat.upper(), "?"))
+            item.setPlainText(str(value))
+
+        self.set_deck_color(deck_color)
+
+    # ------------------------------------------------------------------
+    def set_deck_color(self, color_hex: str):
+        """Apply deck color accents to the frame/outline."""
+        if not self._frame_item:
+            return
+
+        if not color_hex:
+            color = QColor("white")
+        else:
+            color = QColor(color_hex) if QColor.isValidColor(color_hex) else QColor("white")
+
+        self._frame_item.setOpacity(1.0)
+        self._frame_item.setGraphicsEffect(None)
+
+        pen = self._card_rect_item.pen()
+        pen.setColor(color)
+        self._card_rect_item.setPen(pen)
+
+    # ------------------------------------------------------------------
+    def set_frame_pixmap(self, pixmap: QPixmap):
+        if not self._frame_item or pixmap.isNull():
+            return
+        self._frame_item.setPixmap(pixmap)
+        self._frame_item.setPos(0, 0)
+        self._sync_scene_rect(pixmap)
+
+    # ------------------------------------------------------------------
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self._fit_in_view_pending:
@@ -183,6 +241,23 @@ class CardSceneView(QGraphicsView):
             self._background_item.setPixmap(pixmap)
 
         self._sync_scene_rect(pixmap)
+
+    # ------------------------------------------------------------------
+    def export_to_png(self, path: str, width: int = 744, height: int = 1159):
+        """Render the current scene into a PNG file."""
+        if not path:
+            return
+
+        image = QImage(width, height, QImage.Format_ARGB32)
+        image.fill(Qt.transparent)
+
+        painter = QPainter(image)
+        target_rect = QRectF(0, 0, width, height)
+        source_rect = self._card_rect_item.sceneBoundingRect()
+        self._scene.render(painter, target_rect, source_rect)
+        painter.end()
+
+        image.save(path)
 
     # ------------------------------------------------------------------
     def clear_template(self):

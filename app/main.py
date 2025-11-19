@@ -43,7 +43,6 @@ from PySide6.QtWidgets import (
 )
 
 from core.json_loader import JSONLoader
-from core.renderer import CardRenderer
 from core.pdf_exporter import PDFExporter
 
 
@@ -116,7 +115,7 @@ class MainWindow(QMainWindow):
         pixmap = QPixmap(path)
         if pixmap.isNull():
             return
-        self.ui.sceneView.display_background_pixmap(pixmap)
+        self.ui.sceneView.set_frame_pixmap(pixmap)
 
     def connect_buttons(self):
         try:
@@ -174,45 +173,13 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Помилка", "У колоді немає карт.")
             return
 
-        # Папка з EXE
-        base_dir = os.path.dirname(sys.argv[0])
-
-        # export/
-        export_root = os.path.join(base_dir, "export")
-        os.makedirs(export_root, exist_ok=True)
-
-        # export/<deck_name>/
-        deck_name = os.path.splitext(os.path.basename(self.current_deck_path))[0]
-        deck_export_dir = os.path.join(export_root, deck_name)
-        os.makedirs(deck_export_dir, exist_ok=True)
-
         # Генерація
         card = deck["cards"][0]
-        deck_color = deck["deck_color"]
+        deck_color = deck.get("deck_color", "#FFFFFF")
 
-        renderer = CardRenderer(
-            template_path=self.template_path,
-            frame_path=self.frame_path,
-            fonts_folder=resource_path("fonts")
-        )
+        self.ui.sceneView.apply_card_data(card, deck_color)
 
-        img = renderer.render_card(card, deck_color)
-
-        # preview.png
-        preview_path = os.path.join(deck_export_dir, "preview.png")
-        renderer.save_png(img, preview_path)
-
-        preview_path = os.path.abspath(preview_path)
-        preview_path = os.path.normpath(preview_path)
-
-        pixmap = QPixmap(preview_path)
-        if pixmap.isNull():
-            QMessageBox.warning(self, "Помилка", f"Не вдалося завантажити превʼю:\n{preview_path}")
-            return
-
-        self.ui.sceneView.display_pixmap(pixmap)
-
-        QMessageBox.information(self, "OK", f"Превʼю створено:\n{preview_path}")
+        QMessageBox.information(self, "OK", "Превʼю оновлено у редакторі.")
 
     def update_preview(self):
         """
@@ -229,26 +196,9 @@ class MainWindow(QMainWindow):
                 return
 
             card = deck["cards"][0]
-            deck_color = deck["deck_color"]
+            deck_color = deck.get("deck_color", "#FFFFFF")
 
-            renderer = CardRenderer(
-                template_path=self.template_path,
-                frame_path=self.frame_path,
-                fonts_folder=resource_path("fonts")
-            )
-
-            img = renderer.render_card(card, deck_color)
-
-            preview_path = os.path.join(
-                os.path.dirname(sys.argv[0]),
-                "export",
-                "_preview_temp.png"
-            )
-            renderer.save_png(img, preview_path)
-
-            pixmap = QPixmap(os.path.normpath(preview_path))
-            if not pixmap.isNull():
-                self.ui.sceneView.display_pixmap(pixmap)
+            self.ui.sceneView.apply_card_data(card, deck_color)
 
         except Exception as e:
             with open("error.txt", "a", encoding="utf-8") as f:
@@ -269,21 +219,19 @@ class MainWindow(QMainWindow):
         deck_export_dir = os.path.join(export_root, deck_name)
         os.makedirs(deck_export_dir, exist_ok=True)
 
-        renderer = CardRenderer(
-            template_path=self.template_path,
-            frame_path=self.frame_path,
-            fonts_folder=resource_path("fonts")
-        )
+        deck_color = deck.get("deck_color", "#FFFFFF")
 
-        deck_color = deck["deck_color"]
+        frame_pixmap = QPixmap(self.frame_path)
+        if not frame_pixmap.isNull():
+            self.ui.sceneView.set_frame_pixmap(frame_pixmap)
 
         for card in deck["cards"]:
-            img = renderer.render_card(card, deck_color)
             out_path = os.path.join(
                 deck_export_dir,
                 f"{card['name'].replace(' ', '_')}.png"
             )
-            renderer.save_png(img, out_path)
+            self.ui.sceneView.apply_card_data(card, deck_color)
+            self.ui.sceneView.export_to_png(out_path)
 
         QMessageBox.information(self, "OK", f"Набір карт згенеровано:\n{deck_export_dir}")
 
