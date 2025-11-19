@@ -2,6 +2,8 @@ import sys
 import json
 import os
 import traceback
+from PySide6.QtGui import QPixmap
+
 
 def exception_handler(exc_type, exc_value, exc_traceback):
     """Записує всі помилки у error.txt поруч із EXE."""
@@ -245,6 +247,10 @@ class MainWindow(QMainWindow):
 
         deck_name = os.path.splitext(os.path.basename(self.current_deck_path))[0]
         deck_export_dir = os.path.join(export_root, deck_name)
+
+        if not os.path.isdir(deck_export_dir):
+            QMessageBox.warning(self, "Помилка", f"Не знайдено директорію:\n{deck_export_dir}")
+            return
 
         pdf_path = os.path.join(deck_export_dir, f"{deck_name}.pdf")
 

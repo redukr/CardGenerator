@@ -12,19 +12,34 @@ class PDFExporter:
     def mm_to_px(self, mm_value):
         return int((mm_value / 25.4) * self.dpi)
 
-    def export_pdf(self, image_paths, output_path, card_width_mm=40, card_height_mm=62, bleed_mm=0):
+    def export_pdf(self, folder, output_path, card_width_mm=40, card_height_mm=62, bleed_mm=0):
+        """
+        Правильний метод: приймає шлях до директорії з PNG-файлами.
+        """
+
+        if not os.path.isdir(folder):
+            raise FileNotFoundError(f"Директорію не знайдено: {folder}")
+
+        # Збираємо всі PNG-файли
+        image_paths = []
+        for f in os.listdir(folder):
+            if f.lower().endswith(".png"):
+                full_path = os.path.join(folder, f)
+                if os.path.isfile(full_path):
+                    image_paths.append(full_path)
+
         if not image_paths:
-            raise ValueError("Немає зображень для експорту у PDF.")
+            raise FileNotFoundError(f"У директорії немає PNG-файлів:\n{folder}")
 
-        page_width, page_height = A4  # у пунктах reportlab
+        # Розміри карток
+        page_width, page_height = A4
         margin = self.margin_mm * mm
-
-        card_w_px = self.mm_to_px(card_width_mm + bleed_mm * 2)
-        card_h_px = self.mm_to_px(card_height_mm + bleed_mm * 2)
 
         card_w_pt = card_width_mm * mm
         card_h_pt = card_height_mm * mm
 
+        # Готуємо PDF
+        from reportlab.pdfgen import canvas
         c = canvas.Canvas(output_path, pagesize=A4)
 
         x = margin
@@ -35,13 +50,11 @@ class PDFExporter:
 
         counter = 0
 
+        # Додаємо кожну картку
         for img_path in image_paths:
-            if not os.path.exists(img_path):
-                continue
-
             temp_img = Image.open(img_path)
             temp_img_path = img_path + "_tmp_for_pdf.png"
-            temp_img.save(temp_img_path, dpi=(300,300))
+            temp_img.save(temp_img_path, dpi=(300, 300))
 
             c.drawImage(
                 temp_img_path,
@@ -49,7 +62,7 @@ class PDFExporter:
                 width=card_w_pt,
                 height=card_h_pt,
                 preserveAspectRatio=True,
-                mask='auto'
+                mask="auto"
             )
 
             os.remove(temp_img_path)

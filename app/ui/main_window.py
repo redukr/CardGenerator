@@ -72,13 +72,12 @@ class Ui_MainWindow(object):
         # === Права зона (майбутнє превʼю або шаблон-редактор) ===
         self.rightPanel = QVBoxLayout()
 
-        self.previewArea = QLabel("Превʼю / Редактор шаблону")
-        self.previewArea.setAlignment(Qt.AlignCenter)
-        self.previewArea.setStyleSheet(
+        self.previewLabel = QLabel("Превʼю / Редактор шаблону")
+        self.previewLabel.setAlignment(Qt.AlignCenter)
+        self.previewLabel.setStyleSheet(
             "background-color: #e7e7e7; border: 1px solid #aaa; font-size: 20px;"
         )
-
-        self.rightPanel.addWidget(self.previewArea)
+        self.rightPanel.addWidget(self.previewLabel)
         self.mainLayout.addLayout(self.rightPanel, 1)
 
         # ==== Завершення ====
