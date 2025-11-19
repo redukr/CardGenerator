@@ -1,8 +1,7 @@
 import sys
 import json
 import os
-
-import sys, os, traceback
+import traceback
 
 def exception_handler(exc_type, exc_value, exc_traceback):
     """Записує всі помилки у error.txt поруч із EXE."""
@@ -40,8 +39,6 @@ def resource_path(*paths):
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QFileDialog, QMessageBox
 )
-from PySide6.QtUiTools import QUiLoader
-from PySide6.QtCore import QFile, QIODevice
 
 from core.json_loader import JSONLoader
 from core.renderer import CardRenderer
@@ -62,30 +59,15 @@ def save_config(cfg):
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=4, ensure_ascii=False)
 
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        ui_path = resource_path("ui", "main_window.ui")
-        loader = QUiLoader()
+        from ui.main_window import Ui_MainWindow
 
-        try:
-            with open(ui_path, "rb") as f:
-                ui_bytes = f.read()
-
-            self.ui = loader.loadFromData(ui_bytes, self)
-
-            if self.ui is None:
-                raise FileNotFoundError(f"Не вдалося завантажити UI: {ui_path}")
-
-        except Exception as e:
-            exception_handler(type(e), e, e.__traceback__)
-            raise
-
-        self.setCentralWidget(self.ui)
-                            
-        self.setCentralWidget(self.ui)
+        self.ui = Ui_MainWindow()
+        self.ui.setupUi(self)
+        self.ui.btnSetWorkspace.setText("Директорія Експорту")
 
         self.config = load_config()
 
@@ -96,11 +78,30 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("CardGenerator — Alpha Build")
         self.resize(1400, 900)
+      
+    def select_frame(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Обрати рамку",
+            "",
+            "PNG Files (*.png)"
+        )
+
+        if not path:
+            return
+
+        self.config["frame_path"] = path
+        save_config(self.config)
+
+        self.ui.labelFrameStatus.setText(f"Рамка: {os.path.basename(path)}")
+
+        QMessageBox.information(self, "OK", f"Рамка вибрана:\n{path}")
 
     def connect_buttons(self):
         try:
             self.ui.btnLoadJSON.clicked.connect(self.load_json_deck)
             self.ui.btnSetWorkspace.clicked.connect(self.set_workspace)
+            self.ui.btnSelectFrame.clicked.connect(self.select_frame)
             self.ui.btnGeneratePreview.clicked.connect(self.generate_preview)
             self.ui.btnGenerateSet.clicked.connect(self.generate_set)
             self.ui.btnGeneratePDF.clicked.connect(self.generate_pdf)
@@ -114,6 +115,8 @@ class MainWindow(QMainWindow):
             self.config["workspace"] = folder
             save_config(self.config)
             QMessageBox.information(self, "OK", f"Workspace встановлено:\n{folder}")
+            self.ui.labelWorkspaceStatus.setText(f"Експорт: {folder}")
+
 
     def load_json_deck(self):
         path, _ = QFileDialog.getOpenFileName(self, "Обрати JSON колоду", "", "JSON Files (*.json)")
@@ -129,6 +132,8 @@ class MainWindow(QMainWindow):
             save_config(self.config)
 
             QMessageBox.information(self, "OK", f"Колодa завантажена:\n{os.path.basename(path)}")
+            self.ui.labelJsonStatus.setText(f"JSON: {os.path.basename(path)}")
+
 
         except Exception as e:
             QMessageBox.critical(self, "Помилка", f"JSON не вдалося прочитати:\n{str(e)}")
@@ -153,7 +158,7 @@ class MainWindow(QMainWindow):
 
         renderer = CardRenderer(
             template_path = resource_path("template.json"),
-            frame_path    = resource_path("frames", "base_frame.png"),
+            frame_path = self.config.get("frame_path", resource_path("frames", "base_frame.png")),
             fonts_folder  = resource_path("fonts")
         )
 
@@ -178,7 +183,7 @@ class MainWindow(QMainWindow):
 
         renderer = CardRenderer(
             template_path = resource_path("template.json"),
-            frame_path    = resource_path("frames", "base_frame.png"),
+            frame_path = self.config.get("frame_path", resource_path("frames", "base_frame.png")),
             fonts_folder  = resource_path("fonts")
         )
 

@@ -5,18 +5,13 @@ import os
 project_path = os.getcwd()
 
 datas = []
-
-# Всі папки з ресурсами
 for folder in ["ui", "core", "widgets", "frames", "icons", "fonts", "decks"]:
     full_path = os.path.join(project_path, folder)
     if os.path.isdir(full_path):
         datas.append((full_path, folder))
 
-# Файли в корені app/
 datas.append((os.path.join(project_path, "template.json"), "."))
 datas.append((os.path.join(project_path, "config.json"), "."))
-
-block_cipher = None
 
 a = Analysis(
     ['main.py'],
@@ -26,10 +21,10 @@ a = Analysis(
     hiddenimports=[],
     hookspath=[],
     runtime_hooks=[],
-    cipher=block_cipher
+    cipher=None
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
 exe = EXE(
     pyz,
@@ -37,9 +32,6 @@ exe = EXE(
     [],
     exclude_binaries=False,
     name='CardGenerator',
-    debug=False,
-    strip=False,
-    upx=False,
     console=False
 )
 
