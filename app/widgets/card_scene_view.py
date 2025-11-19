@@ -4,18 +4,27 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from typing import Dict, Optional
 
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QPen, QBrush, QPainter, QPixmap
+from PySide6.QtGui import QColor, QPen, QBrush, QPainter, QPixmap, QFont
 from PySide6.QtWidgets import (
     QGraphicsItem,
     QGraphicsPixmapItem,
     QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsSimpleTextItem,
+    QGraphicsTextItem,
     QGraphicsView,
 )
+
+
+APP_DIR = Path(__file__).resolve().parent.parent
+
+
+def resource_path(*paths: str) -> str:
+    return str(APP_DIR.joinpath(*paths))
 
 
 class TemplateBlockItem(QGraphicsRectItem):
@@ -66,12 +75,23 @@ class CardSceneView(QGraphicsView):
 
         self._background_item: Optional[QGraphicsPixmapItem] = None
         self._preview_item: Optional[QGraphicsPixmapItem] = None
+        self._frame_item: Optional[QGraphicsPixmapItem] = None
+        self._image_item: Optional[QGraphicsPixmapItem] = None
+        self.name_item: Optional[QGraphicsTextItem] = None
+        self.type_item: Optional[QGraphicsTextItem] = None
+        self.desc_item: Optional[QGraphicsTextItem] = None
+        self.stat_items: Dict[str, QGraphicsTextItem] = {}
+        self.stat_icon_items: Dict[str, QGraphicsPixmapItem] = {}
+        self.class_icon_item: Optional[QGraphicsPixmapItem] = None
+        self.decor_items: list[QGraphicsItem] = []
 
         self._card_rect_item = QGraphicsRectItem(0, 0, 744, 1038)
         self._card_rect_item.setBrush(QBrush(Qt.NoBrush))
         self._card_rect_item.setPen(QPen(QColor(250, 250, 250), 2))
         self._card_rect_item.setZValue(5)
         self._scene.addItem(self._card_rect_item)
+
+        self._init_card_template_items()
 
         self.setRenderHint(QPainter.Antialiasing, True)
         self.setRenderHint(QPainter.SmoothPixmapTransform, True)
@@ -209,4 +229,160 @@ class CardSceneView(QGraphicsView):
         self.clear_template()
         for name, block in template_data.items():
             self.add_template_block(name, block)
+
+    # ------------------------------------------------------------------
+    def _init_card_template_items(self):
+        self._create_frame_item()
+        self._create_image_placeholder()
+        self._create_text_items()
+        self._create_stat_items()
+        self._create_class_icon()
+        self._create_decor_items()
+
+    # ------------------------------------------------------------------
+    def _create_frame_item(self):
+        if not self._frame_item:
+            self._frame_item = QGraphicsPixmapItem()
+            self._frame_item.setTransformationMode(Qt.SmoothTransformation)
+            self._frame_item.setZValue(0)
+            self._scene.addItem(self._frame_item)
+            self._make_item_interactive(self._frame_item)
+
+        frame_path = resource_path("frames", "base_frame.png")
+        if os.path.exists(frame_path):
+            frame_pixmap = QPixmap(frame_path)
+        else:
+            rect = self._card_rect_item.rect()
+            frame_pixmap = QPixmap(int(rect.width()), int(rect.height()))
+            frame_pixmap.fill(QColor(55, 55, 55))
+
+        self._frame_item.setPixmap(frame_pixmap)
+        self._frame_item.setPos(0, 0)
+        if not frame_pixmap.isNull():
+            self._sync_scene_rect(frame_pixmap)
+
+    # ------------------------------------------------------------------
+    def _create_image_placeholder(self):
+        if not self._image_item:
+            self._image_item = QGraphicsPixmapItem()
+            self._image_item.setTransformationMode(Qt.SmoothTransformation)
+            self._image_item.setZValue(1)
+            self._scene.addItem(self._image_item)
+            self._make_item_interactive(self._image_item)
+
+        art_pixmap = QPixmap(520, 320)
+        art_pixmap.fill(QColor(45, 60, 75))
+        self._image_item.setPixmap(art_pixmap)
+        self._image_item.setPos(110, 160)
+
+    # ------------------------------------------------------------------
+    def _create_text_items(self):
+        self.name_item = self._create_text_item(
+            "Card Name", 28, QColor("white"), (50, 40), bold=True
+        )
+        self.type_item = self._create_text_item(
+            "UNIT", 16, QColor("#F7D56E"), (50, 90)
+        )
+        self.desc_item = self._create_text_item(
+            "Description text...", 18, QColor("white"), (50, 150), text_width=460
+        )
+
+    # ------------------------------------------------------------------
+    def _create_stat_items(self):
+        stats = ["ATK", "DEF", "STB", "INIT", "RNG", "MOVE"]
+        self.stat_items.clear()
+        self.stat_icon_items.clear()
+        x_offset = 110
+        y_offset = 740
+        line_height = 42
+
+        for index, stat in enumerate(stats):
+            y = y_offset + index * line_height
+            item = self._create_text_item(
+                f"{stat}: 0", 18, QColor("white"), (x_offset, y)
+            )
+            self.stat_items[stat] = item
+
+            icon = self._create_icon_item(stat.lower(), (x_offset - 60, y - 6))
+            if icon:
+                self.stat_icon_items[stat] = icon
+
+    # ------------------------------------------------------------------
+    def _create_class_icon(self):
+        icon = self._create_icon_item("ci", (560, 60), size=(96, 96))
+        if icon:
+            self.class_icon_item = icon
+
+    # ------------------------------------------------------------------
+    def _create_decor_items(self):
+        for item in self.decor_items:
+            self._scene.removeItem(item)
+        self.decor_items.clear()
+
+        accents = [
+            (QColor(255, 255, 255, 35), QRectF(40, 520, 640, 4)),
+            (QColor(255, 255, 255, 20), QRectF(40, 530, 640, 20)),
+        ]
+        for color, rect in accents:
+            deco = QGraphicsRectItem(rect)
+            deco.setBrush(QBrush(color))
+            deco.setPen(QPen(Qt.NoPen))
+            deco.setZValue(2.5)
+            self._scene.addItem(deco)
+            self._make_item_interactive(deco)
+            self.decor_items.append(deco)
+
+    # ------------------------------------------------------------------
+    def _create_text_item(
+        self,
+        text: str,
+        size: int,
+        color: QColor,
+        pos: tuple[float, float],
+        *,
+        bold: bool = False,
+        text_width: Optional[int] = None,
+    ) -> QGraphicsTextItem:
+        item = QGraphicsTextItem(text)
+        font = QFont("Arial", pointSize=size)
+        font.setBold(bold)
+        item.setFont(font)
+        item.setDefaultTextColor(color)
+        if text_width:
+            item.setTextWidth(text_width)
+        item.setPos(*pos)
+        item.setZValue(3)
+        self._scene.addItem(item)
+        self._make_item_interactive(item, editable_text=True)
+        return item
+
+    # ------------------------------------------------------------------
+    def _create_icon_item(
+        self, name: str, pos: tuple[float, float], size: tuple[int, int] = (32, 32)
+    ) -> Optional[QGraphicsPixmapItem]:
+        icon_path = resource_path("icons", f"{name}.png")
+        if not os.path.exists(icon_path):
+            return None
+
+        pixmap = QPixmap(icon_path)
+        if not pixmap.isNull() and size:
+            pixmap = pixmap.scaled(*size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+        icon_item = QGraphicsPixmapItem(pixmap)
+        icon_item.setTransformationMode(Qt.SmoothTransformation)
+        icon_item.setPos(*pos)
+        icon_item.setZValue(3)
+        self._scene.addItem(icon_item)
+        self._make_item_interactive(icon_item)
+        return icon_item
+
+    # ------------------------------------------------------------------
+    def _make_item_interactive(
+        self, item: QGraphicsItem, *, editable_text: bool = False
+    ) -> None:
+        item.setFlag(QGraphicsItem.ItemIsMovable, True)
+        item.setFlag(QGraphicsItem.ItemIsSelectable, True)
+        item.setFlag(QGraphicsItem.ItemIsFocusable, True)
+        if editable_text and isinstance(item, QGraphicsTextItem):
+            item.setTextInteractionFlags(Qt.TextEditorInteraction)
 
