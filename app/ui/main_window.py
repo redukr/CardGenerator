@@ -3,6 +3,7 @@ from PySide6.QtGui import *
 from PySide6.QtWidgets import *
 
 from widgets.card_scene_view import CardSceneView
+from widgets.property_panel import PropertyPanel
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -52,6 +53,17 @@ class Ui_MainWindow(object):
         self.labelFrameStatus.setStyleSheet("color: #444; font-size: 14px;")
         self.leftPanel.addWidget(self.labelFrameStatus)
 
+        # --- Режим редагування ---
+        mode_layout = QHBoxLayout()
+        mode_layout.addWidget(QLabel("Режим:"))
+        self.comboEditMode = QComboBox()
+        self.comboEditMode.addItems(["Template", "Card"])
+        mode_layout.addWidget(self.comboEditMode)
+        self.leftPanel.addLayout(mode_layout)
+
+        self.chkTemplateLock = QCheckBox("Template Lock")
+        self.leftPanel.addWidget(self.chkTemplateLock)
+
         # --- Генерація ---
         self.btnGeneratePreview = QPushButton("Генерувати прев'ю")
         self.btnGeneratePreview.setFont(font_buttons)
@@ -65,6 +77,11 @@ class Ui_MainWindow(object):
         self.btnGeneratePDF.setFont(font_buttons)
         self.leftPanel.addWidget(self.btnGeneratePDF)
 
+        self.leftPanel.addWidget(QLabel("Список карт"))
+        self.cardList = QListWidget()
+        self.cardList.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.leftPanel.addWidget(self.cardList)
+
         # Розтягування внизу
         self.leftPanel.addStretch()
 
@@ -75,7 +92,13 @@ class Ui_MainWindow(object):
         self.rightPanel = QVBoxLayout()
 
         self.sceneView = CardSceneView()
-        self.rightPanel.addWidget(self.sceneView)
+        self.propertyPanel = PropertyPanel(self.sceneView)
+
+        self.sceneAndPanel = QHBoxLayout()
+        self.sceneAndPanel.addWidget(self.sceneView, stretch=3)
+        self.sceneAndPanel.addWidget(self.propertyPanel, stretch=1)
+
+        self.rightPanel.addLayout(self.sceneAndPanel)
         self.mainLayout.addLayout(self.rightPanel, 1)
 
         # ==== Завершення ====
