@@ -11,14 +11,14 @@ hidden_imports = collect_submodules('PySide6')
 
 # Включення ресурсів у збірку
 datas = [
-    ('app/icons/*.png', 'app/icons'),
-    ('app/frames/*.png', 'app/frames'),
-    ('app/fonts/*.ttf', 'app/fonts'),
-    ('app/decks/*.json', 'app/decks'),
-    ('app/editor/*.json', 'app/editor'),
-    ('app/template.json', 'app'),
-    ('app/config.json', 'app'),
-    ('app/ui/styles.qss', 'app/ui'),
+    ('icons/*.png', 'icons'),
+    ('frames/*.png', 'frames'),
+    ('fonts/*.ttf', 'fonts'),
+    ('decks/*.json', 'decks'),
+    ('editor/*.json', 'editor'),
+    ('template.json', '.'),
+    ('config.json', '.'),
+    ('ui/styles.qss', 'ui'),
 ]
 
 a = Analysis(
