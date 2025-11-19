@@ -153,20 +153,46 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Помилка", "У колоді немає карт.")
             return
 
+        # Папка з EXE
+        base_dir = os.path.dirname(sys.argv[0])
+
+        # export/
+        export_root = os.path.join(base_dir, "export")
+        os.makedirs(export_root, exist_ok=True)
+
+        # export/<deck_name>/
+        deck_name = os.path.splitext(os.path.basename(self.current_deck_path))[0]
+        deck_export_dir = os.path.join(export_root, deck_name)
+        os.makedirs(deck_export_dir, exist_ok=True)
+
+        # Генерація
         card = deck["cards"][0]
         deck_color = deck["deck_color"]
 
         renderer = CardRenderer(
-            template_path = resource_path("template.json"),
-            frame_path = self.config.get("frame_path", resource_path("frames", "base_frame.png")),
-            fonts_folder  = resource_path("fonts")
+            template_path=resource_path("template.json"),
+            frame_path=resource_path("frames", "base_frame.png"),
+            fonts_folder=resource_path("fonts")
         )
 
         img = renderer.render_card(card, deck_color)
-        out_path = os.path.join(os.path.dirname(__file__), "..", "exports", "preview.png")
-        renderer.save_png(img, out_path)
 
-        QMessageBox.information(self, "OK", f"Прев’ю створено:\n{out_path}")
+        # preview.png
+        preview_path = os.path.join(deck_export_dir, "preview.png")
+        renderer.save_png(img, preview_path)
+
+        preview_path = os.path.abspath(preview_path)
+        preview_path = os.path.normpath(preview_path)
+
+        pixmap = QPixmap(preview_path)
+        if pixmap.isNull():
+            QMessageBox.warning(self, "Помилка", f"Не вдалося завантажити превʼю:\n{preview_path}")
+            return
+
+        self.ui.previewLabel.setPixmap(pixmap)
+        self.ui.previewLabel.repaint()
+
+        QMessageBox.information(self, "OK", f"Превʼю створено:\n{preview_path}")
 
     # ---------------------------
     # Generate Set
@@ -178,29 +204,33 @@ class MainWindow(QMainWindow):
 
         loader = JSONLoader(self.current_deck_path)
         deck = loader.load()
-        cards = deck["cards"]
-        deck_color = deck["deck_color"]
+
+        # Папка EXE
+        base_dir = os.path.dirname(sys.argv[0])
+
+        # export/
+        export_root = os.path.join(base_dir, "export")
+        os.makedirs(export_root, exist_ok=True)
+
+        # export/<deck_name>/
+        deck_name = os.path.splitext(os.path.basename(self.current_deck_path))[0]
+        deck_export_dir = os.path.join(export_root, deck_name)
+        os.makedirs(deck_export_dir, exist_ok=True)
 
         renderer = CardRenderer(
-            template_path = resource_path("template.json"),
-            frame_path = self.config.get("frame_path", resource_path("frames", "base_frame.png")),
-            fonts_folder  = resource_path("fonts")
+            template_path=resource_path("template.json"),
+            frame_path=resource_path("frames", "base_frame.png"),
+            fonts_folder=resource_path("fonts")
         )
 
-        export_dir = self.config.get("workspace", "")
-        if not export_dir:
-            QMessageBox.warning(self, "Помилка", "Workspace не встановлено.")
-            return
+        deck_color = deck["deck_color"]
 
-        os.makedirs(export_dir, exist_ok=True)
-
-        for card in cards:
+        for card in deck["cards"]:
             img = renderer.render_card(card, deck_color)
-            filename = f"{card['name']}.png".replace(" ", "_")
-            out_path = os.path.join(export_dir, filename)
+            out_path = os.path.join(deck_export_dir, f"{card['name'].replace(' ', '_')}.png")
             renderer.save_png(img, out_path)
 
-        QMessageBox.information(self, "OK", f"Набір PNG створено:\n{export_dir}")
+        QMessageBox.information(self, "OK", f"Набір карт згенеровано:\n{deck_export_dir}")
 
     # ---------------------------
     # Generate PDF
@@ -210,24 +240,16 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Помилка", "Завантаж JSON колоди.")
             return
 
-        export_dir = self.config.get("workspace", "")
-        if not export_dir:
-            QMessageBox.warning(self, "Помилка", "Workspace не встановлено.")
-            return
+        base_dir = os.path.dirname(sys.argv[0])
+        export_root = os.path.join(base_dir, "export")
 
-        images = [
-            os.path.join(export_dir, f)
-            for f in os.listdir(export_dir)
-            if f.lower().endswith(".png")
-        ]
+        deck_name = os.path.splitext(os.path.basename(self.current_deck_path))[0]
+        deck_export_dir = os.path.join(export_root, deck_name)
 
-        if not images:
-            QMessageBox.warning(self, "Помилка", "У Workspace немає PNG.")
-            return
+        pdf_path = os.path.join(deck_export_dir, f"{deck_name}.pdf")
 
-        pdf_path = os.path.join(export_dir, "cards.pdf")
         exporter = PDFExporter()
-        exporter.export_pdf(images, pdf_path)
+        exporter.export_pdf(deck_export_dir, pdf_path)
 
         QMessageBox.information(self, "OK", f"PDF створено:\n{pdf_path}")
 
