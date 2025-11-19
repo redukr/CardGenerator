@@ -2,6 +2,8 @@ from PySide6.QtCore import *
 from PySide6.QtGui import *
 from PySide6.QtWidgets import *
 
+from widgets.card_scene_view import CardSceneView
+
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
@@ -72,12 +74,8 @@ class Ui_MainWindow(object):
         # === Права зона (майбутнє превʼю або шаблон-редактор) ===
         self.rightPanel = QVBoxLayout()
 
-        self.previewLabel = QLabel("Превʼю / Редактор шаблону")
-        self.previewLabel.setAlignment(Qt.AlignCenter)
-        self.previewLabel.setStyleSheet(
-            "background-color: #e7e7e7; border: 1px solid #aaa; font-size: 20px;"
-        )
-        self.rightPanel.addWidget(self.previewLabel)
+        self.sceneView = CardSceneView()
+        self.rightPanel.addWidget(self.sceneView)
         self.mainLayout.addLayout(self.rightPanel, 1)
 
         # ==== Завершення ====
