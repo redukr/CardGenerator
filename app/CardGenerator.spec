@@ -2,37 +2,42 @@
 
 import os
 
-project_path = os.getcwd()
+# Папка проєкту — там, де лежить main.py
+project_path = os.path.dirname(os.path.abspath('main.py'))
 
-datas = []
-for folder in ["ui", "core", "widgets", "frames", "icons", "fonts", "decks"]:
-    full_path = os.path.join(project_path, folder)
-    if os.path.isdir(full_path):
-        datas.append((full_path, folder))
-
-datas.append((os.path.join(project_path, "template.json"), "."))
-datas.append((os.path.join(project_path, "config.json"), "."))
+block_cipher = None
 
 a = Analysis(
     ['main.py'],
     pathex=[project_path],
     binaries=[],
-    datas=datas,
+    datas=[
+        (os.path.join(project_path, 'ui'), 'ui'),
+        (os.path.join(project_path, 'frames'), 'frames'),
+        (os.path.join(project_path, 'icons'), 'icons'),
+        (os.path.join(project_path, 'fonts'), 'fonts'),
+        (os.path.join(project_path, 'template.json'), '.'),
+    ],
     hiddenimports=[],
     hookspath=[],
+    hooksconfig={},
     runtime_hooks=[],
-    cipher=None
+    excludes=[],
+    noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=None)
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
     pyz,
     a.scripts,
     [],
-    exclude_binaries=False,
+    exclude_binaries=True,
     name='CardGenerator',
-    console=False
+    debug=False,
+    strip=False,
+    upx=False,
+    console=False,
 )
 
 coll = COLLECT(
@@ -40,7 +45,5 @@ coll = COLLECT(
     a.binaries,
     a.zipfiles,
     a.datas,
-    strip=False,
-    upx=False,
     name='CardGenerator'
 )

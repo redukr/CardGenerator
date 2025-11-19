@@ -1,49 +1,39 @@
 {
+  "card": {
+    "width_mm": 40,
+    "height_mm": 62,
+    "bleed_mm": 3
+  },
+
   "art": {
-    "x_px": 60,
-    "y_px": 80,
-    "w_mm": 36,
-    "h_mm": 30,
-    "font": "",
-    "size": 0,
-    "color": ""
+    "x": 3,
+    "y": 6,
+    "w": 34,
+    "h": 30
   },
 
   "title": {
-    "x_px": 60,
-    "y_px": 40,
+    "x": 3,
+    "y": 3,
     "font": "LS_font.ttf",
-    "size": 28,
+    "size": 5,
     "color": "#FFFFFF"
   },
 
   "stats": {
-    "x_px": 60,
-    "y_px": 480,
+    "x": 3,
+    "y": 39,
     "font": "LS_font.ttf",
-    "size": 26,
+    "size": 4,
     "color": "#FFFFFF"
   },
 
-  "cost_icon": {
-    "x_px": 320,
-    "y_px": 40,
-    "w_mm": 6,
-    "h_mm": 6
-  },
-
-  "cost_text": {
-    "x_px": 330,
-    "y_px": 40,
+  "description": {
+    "x": 3,
+    "y": 45,
+    "w": 34,
     "font": "LS_font.ttf",
-    "size": 26,
+    "size": 3.5,
     "color": "#FFFFFF"
-  },
-
-  "frame": {
-    "x_px": 0,
-    "y_px": 0,
-    "w_mm": 40,
-    "h_mm": 62
   }
 }

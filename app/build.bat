@@ -1,51 +1,36 @@
 @echo off
 chcp 65001 >nul
 
-echo ============================================
-echo     CARD GENERATOR — AUTO BUILD SCRIPT
-echo ============================================
+echo ===============================
+echo   CardGenerator — Build Script
+echo ===============================
+
 echo.
+echo --- Очистка старих збірок ---
 
-REM Переходимо в директорію app/
-cd /d "%~dp0"
-
-echo [1/4] Очищаю старі збірки...
-if exist build (rmdir /s /q build)
-if exist dist (rmdir /s /q dist)
-echo ✔ Очищено.
-echo.
-
-echo [2/4] Використовую portable Python 3.10...
-set PYTHON=..\python310\python.exe
-
-if not exist %PYTHON% (
-    echo ❌ Помилка: portable Python не знайдено.
-    echo Перевір шлях: ..\python310\python.exe
-    pause
-    exit /b
+IF EXIST dist (
+    echo Видаляю dist...
+    rmdir /s /q dist
 )
 
-echo ✔ Python знайдено.
-echo.
-
-echo [3/4] Запускаю PyInstaller...
-%PYTHON% -m PyInstaller CardGenerator.spec
-
-if %errorlevel% neq 0 (
-    echo ❌ Помилка під час збірки EXE!
-    pause
-    exit /b
+IF EXIST build (
+    echo Видаляю build...
+    rmdir /s /q build
 )
 
-echo ✔ PyInstaller успішно завершив роботу.
+IF EXIST __pycache__ (
+    echo Видаляю __pycache__...
+    rmdir /s /q __pycache__
+)
+
+echo.
+echo --- Запуск PyInstaller ---
 echo.
 
-echo [4/4] Готовий EXE:
-echo dist\CardGenerator\CardGenerator.exe
+"..\python310\python.exe" -m PyInstaller CardGenerator.spec
+
 echo.
-
-echo ============================================
-echo          ✔ ЗБІРКА ЗАВЕРШЕНА
-echo ============================================
-
+echo ===============================
+echo   Збірка завершена
+echo ===============================
 pause
