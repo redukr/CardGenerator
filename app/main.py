@@ -72,6 +72,16 @@ class MainWindow(QMainWindow):
         self.ui.btnSetWorkspace.setText("Директорія Експорту")
 
         self.config = load_config()
+        self.template_path = resource_path("template.json")
+        self.frame_path = self.config.get(
+            "frame_path", resource_path("frames", "base_frame.png")
+        )
+
+        self.ui.sceneView.load_template(self.template_path)
+        self._apply_frame_to_scene(self.frame_path)
+        self.ui.labelFrameStatus.setText(
+            f"Рамка: {os.path.basename(self.frame_path)}"
+        )
 
         self.connect_buttons()
 
@@ -94,10 +104,19 @@ class MainWindow(QMainWindow):
 
         self.config["frame_path"] = path
         save_config(self.config)
+        self.frame_path = path
 
         self.ui.labelFrameStatus.setText(f"Рамка: {os.path.basename(path)}")
 
+        self._apply_frame_to_scene(path)
+
         QMessageBox.information(self, "OK", f"Рамка вибрана:\n{path}")
+
+    def _apply_frame_to_scene(self, path: str):
+        pixmap = QPixmap(path)
+        if pixmap.isNull():
+            return
+        self.ui.sceneView.display_background_pixmap(pixmap)
 
     def connect_buttons(self):
         try:
@@ -172,8 +191,8 @@ class MainWindow(QMainWindow):
         deck_color = deck["deck_color"]
 
         renderer = CardRenderer(
-            template_path=resource_path("template.json"),
-            frame_path=resource_path("frames", "base_frame.png"),
+            template_path=self.template_path,
+            frame_path=self.frame_path,
             fonts_folder=resource_path("fonts")
         )
 
@@ -191,8 +210,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Помилка", f"Не вдалося завантажити превʼю:\n{preview_path}")
             return
 
-        self.ui.previewLabel.setPixmap(pixmap)
-        self.ui.previewLabel.repaint()
+        self.ui.sceneView.display_pixmap(pixmap)
 
         QMessageBox.information(self, "OK", f"Превʼю створено:\n{preview_path}")
 
@@ -213,14 +231,9 @@ class MainWindow(QMainWindow):
             card = deck["cards"][0]
             deck_color = deck["deck_color"]
 
-            frame_path = self.config.get(
-                "frame_path",
-                resource_path("frames", "base_frame.png")
-            )
-
             renderer = CardRenderer(
-                template_path=resource_path("template.json"),
-                frame_path=frame_path,
+                template_path=self.template_path,
+                frame_path=self.frame_path,
                 fonts_folder=resource_path("fonts")
             )
 
@@ -235,7 +248,7 @@ class MainWindow(QMainWindow):
 
             pixmap = QPixmap(os.path.normpath(preview_path))
             if not pixmap.isNull():
-                self.ui.previewLabel.setPixmap(pixmap)
+                self.ui.sceneView.display_pixmap(pixmap)
 
         except Exception as e:
             with open("error.txt", "a", encoding="utf-8") as f:
@@ -257,8 +270,8 @@ class MainWindow(QMainWindow):
         os.makedirs(deck_export_dir, exist_ok=True)
 
         renderer = CardRenderer(
-            template_path=resource_path("template.json"),
-            frame_path=self.config.get("frame_path", resource_path("frames", "base_frame.png")),
+            template_path=self.template_path,
+            frame_path=self.frame_path,
             fonts_folder=resource_path("fonts")
         )
 
