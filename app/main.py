@@ -196,9 +196,51 @@ class MainWindow(QMainWindow):
 
         QMessageBox.information(self, "OK", f"Превʼю створено:\n{preview_path}")
 
-    # ---------------------------
-    # Generate Set
-    # ---------------------------
+    def update_preview(self):
+        """
+        Оновлює превʼю картки при будь-якій зміні параметрів UI.
+        """
+        try:
+            if not self.current_deck_path:
+                return
+
+            loader = JSONLoader(self.current_deck_path)
+            deck = loader.load()
+
+            if not deck["cards"]:
+                return
+
+            card = deck["cards"][0]
+            deck_color = deck["deck_color"]
+
+            frame_path = self.config.get(
+                "frame_path",
+                resource_path("frames", "base_frame.png")
+            )
+
+            renderer = CardRenderer(
+                template_path=resource_path("template.json"),
+                frame_path=frame_path,
+                fonts_folder=resource_path("fonts")
+            )
+
+            img = renderer.render_card(card, deck_color)
+
+            preview_path = os.path.join(
+                os.path.dirname(sys.argv[0]),
+                "export",
+                "_preview_temp.png"
+            )
+            renderer.save_png(img, preview_path)
+
+            pixmap = QPixmap(os.path.normpath(preview_path))
+            if not pixmap.isNull():
+                self.ui.previewLabel.setPixmap(pixmap)
+
+        except Exception as e:
+            with open("error.txt", "a", encoding="utf-8") as f:
+                f.write(f"=== ERROR UPDATE PREVIEW ===\n{e}\n\n")
+
     def generate_set(self):
         if not self.current_deck_path:
             QMessageBox.warning(self, "Помилка", "Завантаж JSON колоди.")
@@ -207,21 +249,16 @@ class MainWindow(QMainWindow):
         loader = JSONLoader(self.current_deck_path)
         deck = loader.load()
 
-        # Папка EXE
         base_dir = os.path.dirname(sys.argv[0])
-
-        # export/
         export_root = os.path.join(base_dir, "export")
-        os.makedirs(export_root, exist_ok=True)
 
-        # export/<deck_name>/
         deck_name = os.path.splitext(os.path.basename(self.current_deck_path))[0]
         deck_export_dir = os.path.join(export_root, deck_name)
         os.makedirs(deck_export_dir, exist_ok=True)
 
         renderer = CardRenderer(
             template_path=resource_path("template.json"),
-            frame_path=resource_path("frames", "base_frame.png"),
+            frame_path=self.config.get("frame_path", resource_path("frames", "base_frame.png")),
             fonts_folder=resource_path("fonts")
         )
 
@@ -229,7 +266,10 @@ class MainWindow(QMainWindow):
 
         for card in deck["cards"]:
             img = renderer.render_card(card, deck_color)
-            out_path = os.path.join(deck_export_dir, f"{card['name'].replace(' ', '_')}.png")
+            out_path = os.path.join(
+                deck_export_dir,
+                f"{card['name'].replace(' ', '_')}.png"
+            )
             renderer.save_png(img, out_path)
 
         QMessageBox.information(self, "OK", f"Набір карт згенеровано:\n{deck_export_dir}")
