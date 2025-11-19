@@ -39,12 +39,16 @@ def resource_path(*paths):
 
 
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QFileDialog, QMessageBox
+    QApplication,
+    QFileDialog,
+    QListWidgetItem,
+    QMessageBox,
+    QMainWindow,
 )
 
 from core.json_loader import JSONLoader
-from core.renderer import CardRenderer
 from core.pdf_exporter import PDFExporter
+from core.scene_exporter import SceneExporter
 
 
 def load_config():
@@ -72,7 +76,7 @@ class MainWindow(QMainWindow):
         self.ui.btnSetWorkspace.setText("Директорія Експорту")
 
         self.config = load_config()
-        self.template_path = resource_path("template.json")
+        self.template_path = resource_path("editor", "template_layout.json")
         self.frame_path = self.config.get(
             "frame_path", resource_path("frames", "base_frame.png")
         )
@@ -87,6 +91,7 @@ class MainWindow(QMainWindow):
 
         self.current_deck = None
         self.current_deck_path = None
+        self.scene_exporter = SceneExporter(self.ui.sceneView)
 
         self.setWindowTitle("CardGenerator — Alpha Build")
         self.resize(1400, 900)
@@ -116,7 +121,7 @@ class MainWindow(QMainWindow):
         pixmap = QPixmap(path)
         if pixmap.isNull():
             return
-        self.ui.sceneView.display_background_pixmap(pixmap)
+        self.ui.sceneView.set_frame_pixmap(pixmap)
 
     def connect_buttons(self):
         try:
@@ -126,6 +131,9 @@ class MainWindow(QMainWindow):
             self.ui.btnGeneratePreview.clicked.connect(self.generate_preview)
             self.ui.btnGenerateSet.clicked.connect(self.generate_set)
             self.ui.btnGeneratePDF.clicked.connect(self.generate_pdf)
+            self.ui.cardList.currentRowChanged.connect(self.update_preview_for_selection)
+            self.ui.comboEditMode.currentTextChanged.connect(self._on_edit_mode_changed)
+            self.ui.chkTemplateLock.toggled.connect(self.ui.sceneView.set_template_locked)
         except Exception as e:
             print("⚠ UI кнопки не знайдено:")
             print(e)
@@ -145,19 +153,40 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                self.current_deck = json.load(f)
-                self.current_deck_path = path
+            loader = JSONLoader(path)
+            deck = loader.load()
+            self.current_deck = deck
+            self.current_deck_path = path
 
             self.config["last_deck"] = path
             save_config(self.config)
 
             QMessageBox.information(self, "OK", f"Колодa завантажена:\n{os.path.basename(path)}")
             self.ui.labelJsonStatus.setText(f"JSON: {os.path.basename(path)}")
-
+            self._populate_card_list(deck)
+            self.update_preview_for_selection()
 
         except Exception as e:
             QMessageBox.critical(self, "Помилка", f"JSON не вдалося прочитати:\n{str(e)}")
+
+    def _populate_card_list(self, deck, *, selected_index: int = 0):
+        self.ui.cardList.blockSignals(True)
+        self.ui.cardList.clear()
+        for card in deck.cards:
+            item = QListWidgetItem(card.name)
+            self.ui.cardList.addItem(item)
+        self.ui.cardList.blockSignals(False)
+        if deck.cards:
+            index = min(max(selected_index, 0), len(deck.cards) - 1)
+            self.ui.cardList.setCurrentRow(index)
+
+    def _current_card(self):
+        if not self.current_deck or not self.current_deck.cards:
+            return None
+        row = self.ui.cardList.currentRow()
+        if row < 0:
+            row = 0
+        return self.current_deck.card_at(row) or self.current_deck.cards[0]
 
     # ---------------------------
     # Generate Preview
@@ -169,87 +198,32 @@ class MainWindow(QMainWindow):
 
         loader = JSONLoader(self.current_deck_path)
         deck = loader.load()
+        current_row = self.ui.cardList.currentRow()
+        self.current_deck = deck
+        self._populate_card_list(deck, selected_index=current_row)
 
-        if not deck["cards"]:
+        if not deck.cards:
             QMessageBox.warning(self, "Помилка", "У колоді немає карт.")
             return
 
-        # Папка з EXE
-        base_dir = os.path.dirname(sys.argv[0])
-
-        # export/
-        export_root = os.path.join(base_dir, "export")
-        os.makedirs(export_root, exist_ok=True)
-
-        # export/<deck_name>/
-        deck_name = os.path.splitext(os.path.basename(self.current_deck_path))[0]
-        deck_export_dir = os.path.join(export_root, deck_name)
-        os.makedirs(deck_export_dir, exist_ok=True)
-
-        # Генерація
-        card = deck["cards"][0]
-        deck_color = deck["deck_color"]
-
-        renderer = CardRenderer(
-            template_path=self.template_path,
-            frame_path=self.frame_path,
-            fonts_folder=resource_path("fonts")
-        )
-
-        img = renderer.render_card(card, deck_color)
-
-        # preview.png
-        preview_path = os.path.join(deck_export_dir, "preview.png")
-        renderer.save_png(img, preview_path)
-
-        preview_path = os.path.abspath(preview_path)
-        preview_path = os.path.normpath(preview_path)
-
-        pixmap = QPixmap(preview_path)
-        if pixmap.isNull():
-            QMessageBox.warning(self, "Помилка", f"Не вдалося завантажити превʼю:\n{preview_path}")
+        card = self._current_card()
+        if not card:
+            QMessageBox.warning(self, "Помилка", "Не вдалося знайти картку для прев'ю.")
             return
 
-        self.ui.sceneView.display_pixmap(pixmap)
+        self.ui.sceneView.apply_card_data(card.payload, deck.deck_color)
 
-        QMessageBox.information(self, "OK", f"Превʼю створено:\n{preview_path}")
+        QMessageBox.information(self, "OK", "Превʼю оновлено у редакторі.")
 
-    def update_preview(self):
-        """
-        Оновлює превʼю картки при будь-якій зміні параметрів UI.
-        """
+    def update_preview_for_selection(self):
+        """Оновлює сцену для вибраної картки у списку."""
+        if not self.current_deck:
+            return
         try:
-            if not self.current_deck_path:
+            card = self._current_card()
+            if not card:
                 return
-
-            loader = JSONLoader(self.current_deck_path)
-            deck = loader.load()
-
-            if not deck["cards"]:
-                return
-
-            card = deck["cards"][0]
-            deck_color = deck["deck_color"]
-
-            renderer = CardRenderer(
-                template_path=self.template_path,
-                frame_path=self.frame_path,
-                fonts_folder=resource_path("fonts")
-            )
-
-            img = renderer.render_card(card, deck_color)
-
-            preview_path = os.path.join(
-                os.path.dirname(sys.argv[0]),
-                "export",
-                "_preview_temp.png"
-            )
-            renderer.save_png(img, preview_path)
-
-            pixmap = QPixmap(os.path.normpath(preview_path))
-            if not pixmap.isNull():
-                self.ui.sceneView.display_pixmap(pixmap)
-
+            self.ui.sceneView.apply_card_data(card.payload, self.current_deck.deck_color)
         except Exception as e:
             with open("error.txt", "a", encoding="utf-8") as f:
                 f.write(f"=== ERROR UPDATE PREVIEW ===\n{e}\n\n")
@@ -261,31 +235,18 @@ class MainWindow(QMainWindow):
 
         loader = JSONLoader(self.current_deck_path)
         deck = loader.load()
+        self.current_deck = deck
 
         base_dir = os.path.dirname(sys.argv[0])
-        export_root = os.path.join(base_dir, "export")
+        export_root = self.config.get("workspace") or os.path.join(base_dir, "export")
 
-        deck_name = os.path.splitext(os.path.basename(self.current_deck_path))[0]
-        deck_export_dir = os.path.join(export_root, deck_name)
-        os.makedirs(deck_export_dir, exist_ok=True)
-
-        renderer = CardRenderer(
-            template_path=self.template_path,
-            frame_path=self.frame_path,
-            fonts_folder=resource_path("fonts")
-        )
-
-        deck_color = deck["deck_color"]
-
-        for card in deck["cards"]:
-            img = renderer.render_card(card, deck_color)
-            out_path = os.path.join(
-                deck_export_dir,
-                f"{card['name'].replace(' ', '_')}.png"
-            )
-            renderer.save_png(img, out_path)
+        deck_export_dir = os.path.join(export_root, deck.name)
+        self.scene_exporter.export_deck(deck, deck_export_dir, frame_path=self.frame_path)
 
         QMessageBox.information(self, "OK", f"Набір карт згенеровано:\n{deck_export_dir}")
+
+    def _on_edit_mode_changed(self, mode_name: str):
+        self.ui.sceneView.set_edit_mode(mode_name.lower())
 
     # ---------------------------
     # Generate PDF
@@ -296,7 +257,7 @@ class MainWindow(QMainWindow):
             return
 
         base_dir = os.path.dirname(sys.argv[0])
-        export_root = os.path.join(base_dir, "export")
+        export_root = self.config.get("workspace") or os.path.join(base_dir, "export")
 
         deck_name = os.path.splitext(os.path.basename(self.current_deck_path))[0]
         deck_export_dir = os.path.join(export_root, deck_name)
