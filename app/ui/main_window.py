@@ -88,8 +88,9 @@ class Ui_MainWindow(object):
         # Додаємо ліву панель
         self.mainLayout.addLayout(self.leftPanel, 0)
 
-        # === Права зона (майбутнє превʼю або шаблон-редактор) ===
-        self.rightPanel = QVBoxLayout()
+        # === Права зона (редактор + властивості) ===
+        self.rightPanel = QHBoxLayout()
+        self.rightPanel.setSpacing(15)
 
         self.sceneView = CardSceneView()
         self.propertyPanel = PropertyPanel(self.sceneView)

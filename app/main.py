@@ -1,26 +1,54 @@
-import sys
 import json
+import logging
 import os
+import sys
 import traceback
+
 from PySide6.QtGui import QPixmap
+
+
+from core.paths import application_base_dir
+
+BASE_DIR = application_base_dir()
+ERROR_LOG_PATH = BASE_DIR / "error.txt"
+APP_LOG_PATH = BASE_DIR / "application.log"
+
+
+def _setup_logger() -> logging.Logger:
+    logger = logging.getLogger("card_generator")
+    logger.setLevel(logging.INFO)
+    if not logger.handlers:
+        formatter = logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s")
+        try:
+            APP_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            handler = logging.FileHandler(APP_LOG_PATH, encoding="utf-8")
+        except (OSError, PermissionError) as exc:
+            handler = logging.StreamHandler()
+            handler.setLevel(logging.INFO)
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+            logger.propagate = False
+            logger.warning(
+                "File logging disabled; could not open %s: %s", APP_LOG_PATH, exc
+            )
+            return logger
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    logger.propagate = False
+    return logger
+
+
+logger = _setup_logger()
 
 
 def exception_handler(exc_type, exc_value, exc_traceback):
     """Записує всі помилки у error.txt поруч із EXE."""
-    # Шлях до error.txt поруч з exe
-    if hasattr(sys, '_MEIPASS'):
-        # Onefile: реальний exe лежить у sys.argv[0]
-        base = os.path.dirname(sys.argv[0])
-    else:
-        # IDE: поруч з main.py
-        base = os.path.dirname(os.path.abspath(__file__))
-
-    log_path = os.path.join(base, "error.txt")
-
-    with open(log_path, "a", encoding="utf-8") as f:
+    with open(ERROR_LOG_PATH, "a", encoding="utf-8") as f:
         f.write("=== ERROR ===\n")
         traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
         f.write("\n")
+    logger.exception("Unhandled exception", exc_info=(exc_type, exc_value, exc_traceback))
+
 
 # Перехопити всі uncaught exceptions
 sys.excepthook = exception_handler
@@ -76,6 +104,8 @@ class MainWindow(QMainWindow):
         self.ui.btnSetWorkspace.setText("Директорія Експорту")
 
         self.config = load_config()
+        self.base_dir = BASE_DIR
+        self.logger = logger
         self.template_path = resource_path("editor", "template_layout.json")
         self.frame_path = self.config.get(
             "frame_path", resource_path("frames", "base_frame.png")
@@ -86,6 +116,8 @@ class MainWindow(QMainWindow):
         self.ui.labelFrameStatus.setText(
             f"Рамка: {os.path.basename(self.frame_path)}"
         )
+
+        self.ui.sceneView.itemSelected.connect(self.ui.propertyPanel.bind_item)
 
         self.connect_buttons()
 
@@ -116,6 +148,7 @@ class MainWindow(QMainWindow):
         self._apply_frame_to_scene(path)
 
         QMessageBox.information(self, "OK", f"Рамка вибрана:\n{path}")
+        self._log(f"Frame selected: {path}")
 
     def _apply_frame_to_scene(self, path: str):
         pixmap = QPixmap(path)
@@ -138,6 +171,9 @@ class MainWindow(QMainWindow):
             print("⚠ UI кнопки не знайдено:")
             print(e)
 
+    def _log(self, message: str):
+        self.logger.info(message)
+
     def set_workspace(self):
         folder = QFileDialog.getExistingDirectory(self, "Обрати директорію workspace")
         if folder:
@@ -145,6 +181,7 @@ class MainWindow(QMainWindow):
             save_config(self.config)
             QMessageBox.information(self, "OK", f"Workspace встановлено:\n{folder}")
             self.ui.labelWorkspaceStatus.setText(f"Експорт: {folder}")
+            self._log(f"Workspace set to: {folder}")
 
 
     def load_json_deck(self):
@@ -165,9 +202,11 @@ class MainWindow(QMainWindow):
             self.ui.labelJsonStatus.setText(f"JSON: {os.path.basename(path)}")
             self._populate_card_list(deck)
             self.update_preview_for_selection()
+            self._log(f"Deck loaded: {path}")
 
         except Exception as e:
             QMessageBox.critical(self, "Помилка", f"JSON не вдалося прочитати:\n{str(e)}")
+            self._log(f"Failed to load deck {path}: {e}")
 
     def _populate_card_list(self, deck, *, selected_index: int = 0):
         self.ui.cardList.blockSignals(True)
@@ -214,6 +253,7 @@ class MainWindow(QMainWindow):
         self.ui.sceneView.apply_card_data(card.payload, deck.deck_color)
 
         QMessageBox.information(self, "OK", "Превʼю оновлено у редакторі.")
+        self._log("Preview generated from current deck")
 
     def update_preview_for_selection(self):
         """Оновлює сцену для вибраної картки у списку."""
@@ -225,8 +265,9 @@ class MainWindow(QMainWindow):
                 return
             self.ui.sceneView.apply_card_data(card.payload, self.current_deck.deck_color)
         except Exception as e:
-            with open("error.txt", "a", encoding="utf-8") as f:
+            with open(ERROR_LOG_PATH, "a", encoding="utf-8") as f:
                 f.write(f"=== ERROR UPDATE PREVIEW ===\n{e}\n\n")
+            self._log(f"Preview update failed: {e}")
 
     def generate_set(self):
         if not self.current_deck_path:
@@ -237,13 +278,13 @@ class MainWindow(QMainWindow):
         deck = loader.load()
         self.current_deck = deck
 
-        base_dir = os.path.dirname(sys.argv[0])
-        export_root = self.config.get("workspace") or os.path.join(base_dir, "export")
+        export_root = self.config.get("workspace") or os.path.join(self.base_dir, "export")
 
         deck_export_dir = os.path.join(export_root, deck.name)
         self.scene_exporter.export_deck(deck, deck_export_dir, frame_path=self.frame_path)
 
         QMessageBox.information(self, "OK", f"Набір карт згенеровано:\n{deck_export_dir}")
+        self._log(f"Card set generated to: {deck_export_dir}")
 
     def _on_edit_mode_changed(self, mode_name: str):
         self.ui.sceneView.set_edit_mode(mode_name.lower())
@@ -256,8 +297,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Помилка", "Завантаж JSON колоди.")
             return
 
-        base_dir = os.path.dirname(sys.argv[0])
-        export_root = self.config.get("workspace") or os.path.join(base_dir, "export")
+        export_root = self.config.get("workspace") or os.path.join(self.base_dir, "export")
 
         deck_name = os.path.splitext(os.path.basename(self.current_deck_path))[0]
         deck_export_dir = os.path.join(export_root, deck_name)
@@ -272,21 +312,17 @@ class MainWindow(QMainWindow):
         exporter.export_pdf(deck_export_dir, pdf_path)
 
         QMessageBox.information(self, "OK", f"PDF створено:\n{pdf_path}")
+        self._log(f"PDF exported: {pdf_path}")
 
 
 if __name__ == "__main__":
-    
-        # Лог старту
     try:
-        if hasattr(sys, '_MEIPASS'):
-            base = os.path.dirname(sys.argv[0])
-        else:
-            base = os.path.dirname(os.path.abspath(__file__))
-
-        with open(os.path.join(base, "error.txt"), "a", encoding="utf-8") as f:
+        with open(ERROR_LOG_PATH, "a", encoding="utf-8") as f:
             f.write("\n=== APP STARTED ===\n")
-    except:
+    except Exception:
         pass
+
+    logger.info("Application started")
 
     app = QApplication(sys.argv)
     window = MainWindow()
