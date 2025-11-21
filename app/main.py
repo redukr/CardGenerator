@@ -117,6 +117,8 @@ class MainWindow(QMainWindow):
             f"Рамка: {os.path.basename(self.frame_path)}"
         )
 
+        self.ui.sceneView.itemSelected.connect(self.ui.propertyPanel.bind_item)
+
         self.connect_buttons()
 
         self.current_deck = None
