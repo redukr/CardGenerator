@@ -1,6 +1,6 @@
-import sys
 import json
 import os
+import sys
 import traceback
 from PySide6.QtGui import QPixmap
 
