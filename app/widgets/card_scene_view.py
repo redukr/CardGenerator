@@ -161,7 +161,7 @@ class CardSceneView(QGraphicsView):
         if not self._preview_item:
             self._preview_item = QGraphicsPixmapItem(pixmap)
             self._preview_item.setTransformationMode(Qt.SmoothTransformation)
-            self._preview_item.setZValue(-10)
+            self._preview_item.setZValue(20)
             self._scene.addItem(self._preview_item)
         else:
             self._preview_item.setPixmap(pixmap)
