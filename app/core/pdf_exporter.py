@@ -45,10 +45,11 @@ class PDFExporter:
         x = margin
         y = page_height - margin - card_h_pt
 
-        cards_per_row = int((page_width - margin * 2) // card_w_pt)
-        cards_per_col = int((page_height - margin * 2) // card_h_pt)
+        cards_per_row = max(1, int((page_width - margin * 2) // card_w_pt))
+        cards_per_col = max(1, int((page_height - margin * 2) // card_h_pt))
 
-        counter = 0
+        current_col = 0
+        rows_used = 0
 
         # Додаємо кожну картку
         for img_path in image_paths:
@@ -67,16 +68,20 @@ class PDFExporter:
 
             os.remove(temp_img_path)
 
-            x += card_w_pt
-            counter += 1
+            current_col += 1
 
-            if counter % cards_per_row == 0:
+            if current_col >= cards_per_row:
+                current_col = 0
+                rows_used += 1
                 x = margin
                 y -= card_h_pt
 
-                if y < margin:
+                if rows_used >= cards_per_col:
                     c.showPage()
                     y = page_height - margin - card_h_pt
+                    rows_used = 0
+            else:
+                x += card_w_pt
 
         c.save()
 
