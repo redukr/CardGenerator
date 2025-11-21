@@ -1,129 +1,430 @@
-"""Interactive QGraphicsView preview/editor for card templates."""
+"""Interactive QGraphicsView-based template editor and renderer."""
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
-from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QPen, QBrush, QPainter, QPixmap, QFont
+from PySide6.QtCore import QPointF, QRectF, QSizeF, Qt, Signal
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QImage,
+    QPainter,
+    QPen,
+    QPixmap,
+)
 from PySide6.QtWidgets import (
+    QGraphicsDropShadowEffect,
     QGraphicsItem,
     QGraphicsPixmapItem,
     QGraphicsRectItem,
     QGraphicsScene,
-    QGraphicsSimpleTextItem,
     QGraphicsTextItem,
     QGraphicsView,
 )
 
-
 APP_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_LAYOUT = APP_DIR / "editor" / "template_layout.json"
 
 
 def resource_path(*paths: str) -> str:
     return str(APP_DIR.joinpath(*paths))
 
 
-class TemplateBlockItem(QGraphicsRectItem):
-    """Simple draggable block that represents template areas."""
+class _CardItemBase:
+    """Mixin that injects shared behaviour into interactive scene items."""
 
-    def __init__(self, name: str, block: dict, parent: Optional[QGraphicsItem] = None):
-        rect = QRectF(0, 0, block.get("w", 50), block.get("h", 20))
-        super().__init__(rect, parent)
-
-        self.block_name = name
-        self.setPos(block.get("x", 0), block.get("y", 0))
-        self.setBrush(QColor(0, 170, 255, 30))
-        self.setPen(QPen(QColor(0, 170, 255), 1, Qt.DashLine))
-        self.setZValue(10)
-        self.setFlags(
-            QGraphicsItem.ItemIsMovable
-            | QGraphicsItem.ItemIsSelectable
-            | QGraphicsItem.ItemSendsGeometryChanges
-        )
-
-        label = QGraphicsSimpleTextItem(name, self)
-        label.setBrush(QColor(0, 170, 255))
-        label.setPos(4, 4)
+    def __init__(self, scene_view: "CardSceneView", item_id: str, config: dict) -> None:
+        self.scene_view = scene_view
+        self.item_id = item_id
+        self.config = config
+        self.setFlag(QGraphicsItem.ItemIsFocusable, True)
+        self.setFlag(QGraphicsItem.ItemIsSelectable, True)
+        self.setFlag(QGraphicsItem.ItemIsMovable, not config.get("locked", False))
 
     # ------------------------------------------------------------------
-    def to_payload(self) -> dict:
-        rect = self.rect()
-        return {
-            "x": self.pos().x(),
-            "y": self.pos().y(),
-            "w": rect.width(),
-            "h": rect.height(),
-        }
+    def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value):  # type: ignore[override]
+        if change == QGraphicsItem.ItemSelectedChange and bool(value):
+            self.scene_view._handle_item_selected(self)
+        if change == QGraphicsItem.ItemPositionChange:
+            return self.scene_view._handle_item_moved(self, value)
+        if change == QGraphicsItem.ItemPositionHasChanged:
+            self.scene_view._emit_item_update(self.item_id)
+        return super().itemChange(change, value)  # type: ignore[misc]
+
+
+class CardTextItem(_CardItemBase, QGraphicsTextItem):
+    def __init__(self, scene_view: "CardSceneView", item_id: str, config: dict):
+        QGraphicsTextItem.__init__(self, config.get("text", ""))
+        _CardItemBase.__init__(self, scene_view, item_id, config)
+        font_cfg = config.get("font", {})
+        font = QFont(font_cfg.get("family", "Arial"), font_cfg.get("size", 20))
+        font.setBold(font_cfg.get("bold", False))
+        font.setItalic(font_cfg.get("italic", False))
+        font.setUnderline(font_cfg.get("underline", False))
+        self.setFont(font)
+        color = QColor(config.get("color", "#FFFFFF"))
+        self.setDefaultTextColor(color)
+        text_width = config.get("text_width")
+        if text_width:
+            self.setTextWidth(text_width)
+        self.setPos(config.get("pos", {}).get("x", 0), config.get("pos", {}).get("y", 0))
+        self.setZValue(config.get("z", 5))
+        self.setOpacity(config.get("opacity", 1.0))
+        self.setTextInteractionFlags(Qt.TextEditorInteraction)
+        if config.get("shadow"):
+            self._apply_shadow(config["shadow"])
+
+    # ------------------------------------------------------------------
+    def _apply_shadow(self, cfg: dict) -> None:
+        effect = QGraphicsDropShadowEffect()
+        effect.setColor(QColor(cfg.get("color", "#000000")))
+        offset = cfg.get("offset", [0, 0])
+        effect.setOffset(offset[0], offset[1])
+        effect.setBlurRadius(cfg.get("blur", 0))
+        self.setGraphicsEffect(effect)
+
+
+class CardPixmapItem(_CardItemBase, QGraphicsPixmapItem):
+    def __init__(self, scene_view: "CardSceneView", item_id: str, config: dict):
+        pixmap = QPixmap(config.get("asset", "")) if config.get("asset") else QPixmap()
+        QGraphicsPixmapItem.__init__(self, pixmap)
+        _CardItemBase.__init__(self, scene_view, item_id, config)
+        self.setTransformationMode(Qt.SmoothTransformation)
+        self.setPos(config.get("pos", {}).get("x", 0), config.get("pos", {}).get("y", 0))
+        self.setZValue(config.get("z", 2))
+        self.setOpacity(config.get("opacity", 1.0))
+
+
+class CardRectItem(_CardItemBase, QGraphicsRectItem):
+    def __init__(self, scene_view: "CardSceneView", item_id: str, config: dict):
+        rect_cfg = config.get("size", {})
+        rect = QRectF(0, 0, rect_cfg.get("w", 100), rect_cfg.get("h", 100))
+        QGraphicsRectItem.__init__(self, rect)
+        _CardItemBase.__init__(self, scene_view, item_id, config)
+        pen_cfg = config.get("pen", {"color": "#FFFFFF", "width": 1})
+        pen = QPen(QColor(pen_cfg.get("color", "#FFFFFF")), pen_cfg.get("width", 1))
+        self.setPen(pen)
+        brush_cfg = config.get("brush")
+        if brush_cfg:
+            self.setBrush(QColor(brush_cfg.get("color", "#FFFFFF")))
+        self.setPos(config.get("pos", {}).get("x", 0), config.get("pos", {}).get("y", 0))
+        self.setZValue(config.get("z", 1))
+        self.setOpacity(config.get("opacity", 1.0))
 
 
 class CardSceneView(QGraphicsView):
-    """QGraphicsView-based preview/editor for card templates."""
+    """Scene-based template editor with layout persistence."""
+
+    selectionChanged = Signal(str)
+    itemUpdated = Signal(str, dict)
+    layoutLoaded = Signal(dict)
+
+    itemSelected = Signal(object)
 
     def __init__(self, template_path: Optional[str] = None, parent=None):
         super().__init__(parent)
 
-        self._template_path = template_path
-        self._template_items: Dict[str, TemplateBlockItem] = {}
+        self.layout_path = template_path or str(DEFAULT_LAYOUT)
+        self.layout: Dict[str, dict] = {}
+        self.scene_items: Dict[str, QGraphicsItem] = {}
+        self.template_locked = False
+        self.edit_mode = "template"
+        self._card_mode_snapshot: Optional[dict] = None
+        self._deck_color = QColor("#FFFFFF")
 
         self._scene = QGraphicsScene(self)
         self.setScene(self._scene)
-        self._scene.setSceneRect(-200, -200, 1600, 2200)
 
-        self._background_item: Optional[QGraphicsPixmapItem] = None
-        self._preview_item: Optional[QGraphicsPixmapItem] = None
-        self._frame_item: Optional[QGraphicsPixmapItem] = None
-        self._image_item: Optional[QGraphicsPixmapItem] = None
-        self.name_item: Optional[QGraphicsTextItem] = None
-        self.type_item: Optional[QGraphicsTextItem] = None
-        self.desc_item: Optional[QGraphicsTextItem] = None
-        self.stat_items: Dict[str, QGraphicsTextItem] = {}
-        self.stat_icon_items: Dict[str, QGraphicsPixmapItem] = {}
-        self.class_icon_item: Optional[QGraphicsPixmapItem] = None
-        self.decor_items: list[QGraphicsItem] = []
+        self.card_size = QSizeF(744, 1038)
+        self.dpi = 300
+        self.grid_size = 25
+        self.snap_size = 5
 
-        self._card_rect_item = QGraphicsRectItem(0, 0, 744, 1038)
-        self._card_rect_item.setBrush(QBrush(Qt.NoBrush))
-        self._card_rect_item.setPen(QPen(QColor(250, 250, 250), 2))
-        self._card_rect_item.setZValue(5)
+        self._background_color = QColor(26, 26, 26)
+        self._card_rect_item = QGraphicsRectItem(0, 0, self.card_size.width(), self.card_size.height())
+        self._card_rect_item.setPen(QPen(QColor(240, 240, 240), 2))
+        self._card_rect_item.setBrush(Qt.NoBrush)
+        self._card_rect_item.setZValue(-5)
         self._scene.addItem(self._card_rect_item)
 
-        self._init_card_template_items()
+        self._frame_item = QGraphicsPixmapItem()
+        self._frame_item.setZValue(-2)
+        self._frame_item.setTransformationMode(Qt.SmoothTransformation)
+        self._scene.addItem(self._frame_item)
+
+        self._art_item_id = "artwork"
+        self._default_art_pixmap = QPixmap(520, 320)
+        self._default_art_pixmap.fill(QColor(45, 60, 75))
 
         self.setRenderHint(QPainter.Antialiasing, True)
         self.setRenderHint(QPainter.SmoothPixmapTransform, True)
-        self.setRenderHint(QPainter.TextAntialiasing, True)
         self.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
         self.setDragMode(QGraphicsView.RubberBandDrag)
-        self.setBackgroundBrush(QColor(26, 26, 26))
 
-        self._zoom = 0
-        self._fit_in_view_pending = True
+        self._scene.setSceneRect(-400, -400, 1600, 2400)
+        self._fit_scheduled = True
+
+        self._scene.selectionChanged.connect(self._on_selection_changed)
 
         if template_path:
             self.load_template(template_path)
 
     # ------------------------------------------------------------------
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if self._fit_in_view_pending:
-            self.fit_card_to_view()
-            self._fit_in_view_pending = False
+    def _emit_selected_item(self):
+        selected = self._scene.selectedItems()
+        item = selected[0] if selected else None
+        self.itemSelected.emit(item)
 
     # ------------------------------------------------------------------
-    def wheelEvent(self, event):
-        if event.modifiers() & Qt.ControlModifier:
-            angle = event.angleDelta().y()
-            factor = 1.1 if angle > 0 else 1 / 1.1
-            self.scale(factor, factor)
-            event.accept()
+    def _on_selection_changed(self):
+        self._emit_selected_item()
+
+    # ------------------------------------------------------------------
+    def apply_card_data(self, card: dict, deck_color: str):
+        """Populate scene items using card data from JSON."""
+        if not card:
+        if not os.path.exists(self.layout_path):
+            self._ensure_default_layout()
+        self.load_template(self.layout_path)
+
+    # ------------------------------------------------------------------
+    def _ensure_default_layout(self):
+        DEFAULT_LAYOUT.parent.mkdir(parents=True, exist_ok=True)
+        layout = {
+            "meta": {
+                "width": 744,
+                "height": 1038,
+                "dpi": 300,
+                "background": "#1c1c1c",
+                "grid": 25,
+                "snap": 5,
+            },
+            "items": {
+                "artwork": {
+                    "type": "image",
+                    "pos": {"x": 112, "y": 160},
+                    "size": {"w": 520, "h": 320},
+                    "z": 1,
+                    "locked": False,
+                    "opacity": 1.0,
+                },
+                "title": {
+                    "type": "text",
+                    "text": "Назва картки",
+                    "pos": {"x": 60, "y": 40},
+                    "font": {"family": "Arial", "size": 30, "bold": True},
+                    "color": "#FFFFFF",
+                    "text_width": 500,
+                    "z": 5,
+                },
+                "type": {
+                    "type": "text",
+                    "text": "UNIT",
+                    "pos": {"x": 60, "y": 90},
+                    "font": {"family": "Arial", "size": 18, "bold": False},
+                    "color": "#F7D56E",
+                    "z": 5,
+                },
+                "description": {
+                    "type": "text",
+                    "text": "Опис здібностей та ефектів...",
+                    "pos": {"x": 60, "y": 520},
+                    "font": {"family": "Arial", "size": 18},
+                    "color": "#FFFFFF",
+                    "text_width": 520,
+                    "z": 5,
+                },
+            },
+        }
+        with open(DEFAULT_LAYOUT, "w", encoding="utf-8") as fh:
+            json.dump(layout, fh, indent=4, ensure_ascii=False)
+
+    # ------------------------------------------------------------------
+    def load_template(self, template_path: str):
+        if not template_path:
             return
-        super().wheelEvent(event)
+        self.layout_path = template_path
+        with open(template_path, "r", encoding="utf-8") as fh:
+            self.layout = json.load(fh)
+        self._apply_layout_meta()
+        self._build_scene_items()
+        self.layoutLoaded.emit(copy.deepcopy(self.layout))
+
+    # ------------------------------------------------------------------
+    def save_layout(self, output_path: Optional[str] = None):
+        if self.edit_mode != "template":
+            return
+        path = output_path or self.layout_path
+        self._sync_layout_from_items()
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(self.layout, fh, indent=4, ensure_ascii=False)
+
+    # ------------------------------------------------------------------
+    def _apply_layout_meta(self):
+        meta = self.layout.get("meta", {})
+        self.card_size = QSizeF(meta.get("width", 744), meta.get("height", 1038))
+        self.dpi = meta.get("dpi", 300)
+        self.grid_size = meta.get("grid", 25)
+        self.snap_size = meta.get("snap", 5)
+        self._background_color = QColor(meta.get("background", "#1a1a1a"))
+        self._card_rect_item.setRect(QRectF(0, 0, self.card_size.width(), self.card_size.height()))
+        self._scene.setSceneRect(self._card_rect_item.rect().adjusted(-250, -250, 250, 250))
+        self.fit_card_to_view()
+        self._apply_relative_positions()
+
+    # ------------------------------------------------------------------
+    def _build_scene_items(self):
+        for item in list(self.scene_items.values()):
+            self._scene.removeItem(item)
+        self.scene_items.clear()
+        items = self.layout.get("items", {})
+        for item_id, cfg in items.items():
+            created = self._create_item(item_id, cfg)
+            if created:
+                self.scene_items[item_id] = created
+                self._scene.addItem(created)
+        art_item = self.scene_items.get(self._art_item_id)
+        if isinstance(art_item, QGraphicsPixmapItem) and art_item.pixmap().isNull():
+            self._set_image(self._art_item_id, self._default_art_pixmap, persist=False)
+        self._apply_relative_positions()
+        self.fit_card_to_view()
+
+    # ------------------------------------------------------------------
+    def _create_item(self, item_id: str, cfg: dict) -> Optional[QGraphicsItem]:
+        item_type = cfg.get("type", "text")
+        if item_type == "text":
+            return CardTextItem(self, item_id, cfg)
+        if item_type in {"image", "pixmap", "icon"}:
+            item = CardPixmapItem(self, item_id, cfg)
+            size = cfg.get("size")
+            if size and not item.pixmap().isNull():
+                scaled = item.pixmap().scaled(
+                    size.get("w", item.pixmap().width()),
+                    size.get("h", item.pixmap().height()),
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+                item.setPixmap(scaled)
+            return item
+        if item_type in {"rect", "decor"}:
+            return CardRectItem(self, item_id, cfg)
+        return None
+
+    # ------------------------------------------------------------------
+    def _apply_relative_positions(self):
+        for item_id, item in self.scene_items.items():
+            cfg = self.layout.get("items", {}).get(item_id, {})
+            bindings = cfg.get("bindings", {})
+            if not bindings.get("relative"):
+                continue
+            anchor = bindings.get("anchor", {})
+            rel_x = anchor.get("x")
+            rel_y = anchor.get("y")
+            if rel_x is None or rel_y is None:
+                pos = cfg.get("pos", {})
+                rel_x = pos.get("x", 0) / max(1.0, self.card_size.width())
+                rel_y = pos.get("y", 0) / max(1.0, self.card_size.height())
+            new_x = rel_x * self.card_size.width()
+            new_y = rel_y * self.card_size.height()
+            item.setPos(new_x, new_y)
+            cfg.setdefault("pos", {})
+            cfg["pos"].update({"x": new_x, "y": new_y})
+
+    # ------------------------------------------------------------------
+    def _sync_layout_from_items(self):
+        for item_id, item in self.scene_items.items():
+            cfg = self.layout.setdefault("items", {}).setdefault(item_id, {})
+            cfg["type"] = cfg.get("type", self._infer_type(item))
+            pos = cfg.setdefault("pos", {})
+            pos["x"] = float(item.pos().x())
+            pos["y"] = float(item.pos().y())
+            cfg["z"] = item.zValue()
+            cfg["opacity"] = item.opacity()
+            if isinstance(item, QGraphicsTextItem):
+                cfg["text"] = item.toPlainText()
+                cfg.setdefault("font", {})["family"] = item.font().family()
+                cfg["font"]["size"] = item.font().pointSize()
+                cfg["font"]["bold"] = item.font().bold()
+                cfg["font"]["italic"] = item.font().italic()
+                cfg["font"]["underline"] = item.font().underline()
+                if item.textWidth() > 0:
+                    cfg["text_width"] = item.textWidth()
+                cfg["color"] = item.defaultTextColor().name(QColor.HexArgb)
+            if isinstance(item, QGraphicsPixmapItem):
+                cfg["asset"] = cfg.get("asset")
+                size = cfg.setdefault("size", {})
+                if not item.pixmap().isNull():
+                    size["w"] = item.pixmap().width()
+                    size["h"] = item.pixmap().height()
+            if isinstance(item, QGraphicsRectItem):
+                size = cfg.setdefault("size", {})
+                rect = item.rect()
+                size["w"] = rect.width()
+                size["h"] = rect.height()
+                pen = item.pen()
+                cfg.setdefault("pen", {})["color"] = pen.color().name(QColor.HexArgb)
+                cfg["pen"]["width"] = pen.widthF()
+                brush = item.brush()
+                if brush.style() != Qt.NoBrush:
+                    cfg.setdefault("brush", {})["color"] = brush.color().name(QColor.HexArgb)
+
+    # ------------------------------------------------------------------
+    def _infer_type(self, item: QGraphicsItem) -> str:
+        if isinstance(item, QGraphicsTextItem):
+            return "text"
+        if isinstance(item, QGraphicsRectItem):
+            return "rect"
+        return "image"
+
+    # ------------------------------------------------------------------
+    def set_frame_pixmap(self, pixmap: QPixmap):
+        if pixmap.isNull():
+            return
+        self._frame_item.setPixmap(pixmap)
+        self._frame_item.setPos(0, 0)
+        self._frame_item.setScale(1.0)
+        self._frame_item.setOpacity(1.0)
+        self._frame_item.setTransformationMode(Qt.SmoothTransformation)
+        self._scene.update()
+
+    # ------------------------------------------------------------------
+    def set_template_locked(self, locked: bool):
+        self.template_locked = locked
+        for item in self.scene_items.values():
+            cfg = getattr(item, "config", {})
+            allow_move = not (locked or cfg.get("locked", False))
+            item.setFlag(QGraphicsItem.ItemIsMovable, allow_move)
+
+    # ------------------------------------------------------------------
+    def set_edit_mode(self, mode: str):
+        if mode == self.edit_mode:
+            return
+        if mode == "card":
+            self._card_mode_snapshot = copy.deepcopy(self.layout)
+        else:
+            if self._card_mode_snapshot:
+                self.layout = self._card_mode_snapshot
+                self._card_mode_snapshot = None
+                self._apply_layout_meta()
+                self._build_scene_items()
+        self.edit_mode = mode
+
+    # ------------------------------------------------------------------
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        self._emit_selected_item()
+
+    # ------------------------------------------------------------------
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        self._emit_selected_item()
 
     # ------------------------------------------------------------------
     def drawBackground(self, painter: QPainter, rect: QRectF):
@@ -132,30 +433,54 @@ class CardSceneView(QGraphicsView):
         grid_size = 50
         left = int(rect.left()) - (int(rect.left()) % grid_size)
         top = int(rect.top()) - (int(rect.top()) % grid_size)
-
-        pen_minor = QPen(QColor(35, 35, 35))
-        for x in range(left, int(rect.right()), grid_size):
-            painter.setPen(pen_minor)
-            painter.drawLine(x, rect.top(), x, rect.bottom())
-        for y in range(top, int(rect.bottom()), grid_size):
-            painter.setPen(pen_minor)
-            painter.drawLine(rect.left(), y, rect.right(), y)
+    def _handle_item_selected(self, item: QGraphicsItem):
+        item_id = self._lookup_item_id(item)
+        if item_id:
+            self.selectionChanged.emit(item_id)
 
     # ------------------------------------------------------------------
-    def fit_card_to_view(self):
-        self.fitInView(self._card_rect_item, Qt.KeepAspectRatio)
+    def _lookup_item_id(self, item: QGraphicsItem) -> Optional[str]:
+        for item_id, scene_item in self.scene_items.items():
+            if scene_item is item:
+                return item_id
+        return None
 
     # ------------------------------------------------------------------
-    def _sync_scene_rect(self, pixmap: QPixmap):
-        rect = QRectF(0, 0, pixmap.width(), pixmap.height())
-        self._card_rect_item.setRect(rect)
-        self._scene.setSceneRect(rect.adjusted(-200, -200, 200, 200))
-        self.fit_card_to_view()
+    def _handle_item_moved(self, item: QGraphicsItem, value):
+        if self.template_locked:
+            return item.pos()
+        new_pos = QPointF(value)
+        rect = self._card_rect_item.rect()
+        bounds = item.mapRectToParent(item.boundingRect())
+        width = bounds.width()
+        height = bounds.height()
+        min_x = rect.left()
+        min_y = rect.top()
+        max_x = rect.right() - width
+        max_y = rect.bottom() - height
+        x = max(min_x, min(new_pos.x(), max_x))
+        y = max(min_y, min(new_pos.y(), max_y))
+        if self.snap_size > 0:
+            x = round(x / self.snap_size) * self.snap_size
+            y = round(y / self.snap_size) * self.snap_size
+        cfg = self.layout.get("items", {}).get(self._lookup_item_id(item) or "", {})
+        bindings = cfg.get("bindings", {})
+        if bindings.get("lock_x"):
+            x = item.pos().x()
+        if bindings.get("lock_y"):
+            y = item.pos().y()
+        return QPointF(x, y)
 
     # ------------------------------------------------------------------
-    def display_pixmap(self, pixmap: QPixmap):
-        """Displays rendered card preview inside the scene."""
-        if pixmap.isNull():
+    def _emit_item_update(self, item_id: str):
+        cfg = self.get_item_config(item_id)
+        if self.edit_mode == "template":
+            self.layout.setdefault("items", {})[item_id] = copy.deepcopy(cfg)
+        self.itemUpdated.emit(item_id, cfg)
+
+    # ------------------------------------------------------------------
+    def apply_card_data(self, card: dict, deck_color: str):
+        if not card:
             return
 
         if not self._preview_item:
@@ -163,226 +488,316 @@ class CardSceneView(QGraphicsView):
             self._preview_item.setTransformationMode(Qt.SmoothTransformation)
             self._preview_item.setZValue(20)
             self._scene.addItem(self._preview_item)
+        self._deck_color = QColor(deck_color) if QColor.isValidColor(deck_color) else QColor("#FFFFFF")
+        # Textual content
+        self._set_text("title", card.get("name", ""), persist=False)
+        self._set_text("type", card.get("type", "").upper(), persist=False)
+        desc = card.get("description") or card.get("text") or card.get("effect", "")
+        self._set_text("description", desc, persist=False)
+        stats = {
+            "atk": card.get("atk", "-"),
+            "def": card.get("def", "-"),
+            "stb": card.get("stb", "-"),
+            "init": card.get("init", "-"),
+            "rng": card.get("rng", "-"),
+            "move": card.get("move", "-"),
+        }
+        for key, value in stats.items():
+            label = key.upper()
+            self._set_text(f"stat_{key}", f"{label} {value}", persist=False)
+        cost = card.get("cost")
+        if cost is not None:
+            self._set_text("cost", str(cost), persist=False)
+        cost_type = card.get("cost_type")
+        if cost_type:
+            self._set_text("cost_type", cost_type, persist=False)
+        # Artwork
+        art_path = card.get("art_path")
+        if art_path and os.path.exists(art_path):
+            pix = QPixmap(art_path)
+            self._set_image(self._art_item_id, pix, persist=False)
         else:
-            self._preview_item.setPixmap(pixmap)
-
-        self._sync_scene_rect(pixmap)
-
-    # ------------------------------------------------------------------
-    def display_background_pixmap(self, pixmap: QPixmap):
-        """Displays selected frame/background while no preview exists."""
-        if pixmap.isNull():
-            return
-
-        if not self._background_item:
-            self._background_item = QGraphicsPixmapItem(pixmap)
-            self._background_item.setTransformationMode(Qt.SmoothTransformation)
-            self._background_item.setZValue(-20)
-            self._scene.addItem(self._background_item)
-        else:
-            self._background_item.setPixmap(pixmap)
-
-        self._sync_scene_rect(pixmap)
+            self._set_image(self._art_item_id, self._default_art_pixmap, persist=False)
+        self.set_deck_color(deck_color)
 
     # ------------------------------------------------------------------
-    def clear_template(self):
-        for item in self._template_items.values():
-            self._scene.removeItem(item)
-        self._template_items.clear()
+    def _set_text(self, item_id: str, text: str, *, persist: bool = True):
+        item = self.scene_items.get(item_id)
+        if isinstance(item, QGraphicsTextItem):
+            item.setPlainText(text)
+            if persist and self.edit_mode == "template":
+                cfg = self.layout.setdefault("items", {}).setdefault(item_id, {})
+                cfg["text"] = text
 
     # ------------------------------------------------------------------
-    def load_template(self, template_path: str):
-        self._template_path = template_path
-        self.clear_template()
-
-        if not template_path or not os.path.exists(template_path):
-            return
-
-        with open(template_path, "r", encoding="utf-8") as f:
-            template_data = json.load(f)
-
-        for name, block in template_data.items():
-            self.add_template_block(name, block)
-
-    # ------------------------------------------------------------------
-    def add_template_block(self, name: str, block: dict):
-        block_item = TemplateBlockItem(name, block)
-        self._scene.addItem(block_item)
-        self._template_items[name] = block_item
+    def _set_image(self, item_id: str, pixmap: QPixmap, *, persist: bool = True):
+        item = self.scene_items.get(item_id)
+        if isinstance(item, QGraphicsPixmapItem) and not pixmap.isNull():
+            size = self.layout.get("items", {}).get(item_id, {}).get("size")
+            if size:
+                pixmap = pixmap.scaled(
+                    size.get("w", pixmap.width()),
+                    size.get("h", pixmap.height()),
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+            item.setPixmap(pixmap)
+            if persist and self.edit_mode == "template":
+                cfg = self.layout.setdefault("items", {}).setdefault(item_id, {})
+                cfg["asset"] = cfg.get("asset")
 
     # ------------------------------------------------------------------
-    def export_template(self) -> Dict[str, dict]:
-        return {name: item.to_payload() for name, item in self._template_items.items()}
+    def set_deck_color(self, color_hex: str):
+        color = QColor(color_hex) if QColor.isValidColor(color_hex) else QColor("white")
+        pen = self._card_rect_item.pen()
+        pen.setColor(color)
+        self._card_rect_item.setPen(pen)
 
     # ------------------------------------------------------------------
-    def save_template(self, output_path: Optional[str] = None):
-        path = output_path or self._template_path
+    def export_to_png(self, path: str):
         if not path:
             return
-
-        data = self.export_template()
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
-
-    # ------------------------------------------------------------------
-    def refresh_from_template_dict(self, template_data: Dict[str, dict]):
-        self.clear_template()
-        for name, block in template_data.items():
-            self.add_template_block(name, block)
-
-    # ------------------------------------------------------------------
-    def _init_card_template_items(self):
-        self._create_frame_item()
-        self._create_image_placeholder()
-        self._create_text_items()
-        self._create_stat_items()
-        self._create_class_icon()
-        self._create_decor_items()
+        width = int(self.card_size.width())
+        height = int(self.card_size.height())
+        image = QImage(width, height, QImage.Format_ARGB32)
+        image.setDotsPerMeterX(int(self.dpi / 25.4 * 1000))
+        image.setDotsPerMeterY(int(self.dpi / 25.4 * 1000))
+        image.fill(Qt.transparent)
+        painter = QPainter(image)
+        self._scene.render(painter, QRectF(0, 0, width, height), self._card_rect_item.rect())
+        painter.end()
+        image.save(path, "PNG")
 
     # ------------------------------------------------------------------
-    def _create_frame_item(self):
-        if not self._frame_item:
-            self._frame_item = QGraphicsPixmapItem()
-            self._frame_item.setTransformationMode(Qt.SmoothTransformation)
-            self._frame_item.setZValue(0)
-            self._scene.addItem(self._frame_item)
-            self._make_item_interactive(self._frame_item)
-
-        frame_path = resource_path("frames", "base_frame.png")
-        if os.path.exists(frame_path):
-            frame_pixmap = QPixmap(frame_path)
-        else:
-            rect = self._card_rect_item.rect()
-            frame_pixmap = QPixmap(int(rect.width()), int(rect.height()))
-            frame_pixmap.fill(QColor(55, 55, 55))
-
-        self._frame_item.setPixmap(frame_pixmap)
-        self._frame_item.setPos(0, 0)
-        if not frame_pixmap.isNull():
-            self._sync_scene_rect(frame_pixmap)
+    def drawBackground(self, painter: QPainter, rect: QRectF):  # type: ignore[override]
+        painter.fillRect(rect, self._background_color)
+        grid = self.grid_size
+        if grid <= 0:
+            return
+        pen = QPen(QColor(35, 35, 35))
+        left = int(rect.left()) - (int(rect.left()) % grid)
+        top = int(rect.top()) - (int(rect.top()) % grid)
+        for x in range(left, int(rect.right()), grid):
+            painter.setPen(pen)
+            painter.drawLine(x, rect.top(), x, rect.bottom())
+        for y in range(top, int(rect.bottom()), grid):
+            painter.setPen(pen)
+            painter.drawLine(rect.left(), y, rect.right(), y)
 
     # ------------------------------------------------------------------
-    def _create_image_placeholder(self):
-        if not self._image_item:
-            self._image_item = QGraphicsPixmapItem()
-            self._image_item.setTransformationMode(Qt.SmoothTransformation)
-            self._image_item.setZValue(1)
-            self._scene.addItem(self._image_item)
-            self._make_item_interactive(self._image_item)
-
-        art_pixmap = QPixmap(520, 320)
-        art_pixmap.fill(QColor(45, 60, 75))
-        self._image_item.setPixmap(art_pixmap)
-        self._image_item.setPos(110, 160)
+    def resizeEvent(self, event):  # type: ignore[override]
+        super().resizeEvent(event)
+        if self._fit_scheduled:
+            self.fit_card_to_view()
+            self._fit_scheduled = False
 
     # ------------------------------------------------------------------
-    def _create_text_items(self):
-        self.name_item = self._create_text_item(
-            "Card Name", 28, QColor("white"), (50, 40), bold=True
-        )
-        self.type_item = self._create_text_item(
-            "UNIT", 16, QColor("#F7D56E"), (50, 90)
-        )
-        self.desc_item = self._create_text_item(
-            "Description text...", 18, QColor("white"), (50, 150), text_width=460
-        )
+    def wheelEvent(self, event):  # type: ignore[override]
+        if event.modifiers() & Qt.ControlModifier:
+            factor = 1.15 if event.angleDelta().y() > 0 else 0.87
+            self.scale(factor, factor)
+            event.accept()
+            return
+        super().wheelEvent(event)
 
     # ------------------------------------------------------------------
-    def _create_stat_items(self):
-        stats = ["ATK", "DEF", "STB", "INIT", "RNG", "MOVE"]
-        self.stat_items.clear()
-        self.stat_icon_items.clear()
-        x_offset = 110
-        y_offset = 740
-        line_height = 42
-
-        for index, stat in enumerate(stats):
-            y = y_offset + index * line_height
-            item = self._create_text_item(
-                f"{stat}: 0", 18, QColor("white"), (x_offset, y)
-            )
-            self.stat_items[stat] = item
-
-            icon = self._create_icon_item(stat.lower(), (x_offset - 60, y - 6))
-            if icon:
-                self.stat_icon_items[stat] = icon
+    def fit_card_to_view(self):
+        self.fitInView(self._card_rect_item, Qt.KeepAspectRatio)
 
     # ------------------------------------------------------------------
-    def _create_class_icon(self):
-        icon = self._create_icon_item("ci", (560, 60), size=(96, 96))
-        if icon:
-            self.class_icon_item = icon
+    def set_background_color(self, color: QColor):
+        self._background_color = color
+        self.layout.setdefault("meta", {})["background"] = color.name(QColor.HexArgb)
+        self.viewport().update()
 
     # ------------------------------------------------------------------
-    def _create_decor_items(self):
-        for item in self.decor_items:
-            self._scene.removeItem(item)
-        self.decor_items.clear()
-
-        accents = [
-            (QColor(255, 255, 255, 35), QRectF(40, 520, 640, 4)),
-            (QColor(255, 255, 255, 20), QRectF(40, 530, 640, 20)),
-        ]
-        for color, rect in accents:
-            deco = QGraphicsRectItem(rect)
-            deco.setBrush(QBrush(color))
-            deco.setPen(QPen(Qt.NoPen))
-            deco.setZValue(2.5)
-            self._scene.addItem(deco)
-            self._make_item_interactive(deco)
-            self.decor_items.append(deco)
+    def update_text_width(self, item_id: str, width: float):
+        item = self.scene_items.get(item_id)
+        if isinstance(item, QGraphicsTextItem):
+            item.setTextWidth(width)
+            if self.edit_mode == "template":
+                cfg = self.layout.setdefault("items", {}).setdefault(item_id, {})
+                cfg["text_width"] = width
 
     # ------------------------------------------------------------------
-    def _create_text_item(
-        self,
-        text: str,
-        size: int,
-        color: QColor,
-        pos: tuple[float, float],
-        *,
-        bold: bool = False,
-        text_width: Optional[int] = None,
-    ) -> QGraphicsTextItem:
-        item = QGraphicsTextItem(text)
-        font = QFont("Arial", pointSize=size)
-        font.setBold(bold)
-        item.setFont(font)
-        item.setDefaultTextColor(color)
-        if text_width:
-            item.setTextWidth(text_width)
-        item.setPos(*pos)
-        item.setZValue(3)
-        self._scene.addItem(item)
-        self._make_item_interactive(item, editable_text=True)
-        return item
+    def update_font(self, item_id: str, font: QFont):
+        item = self.scene_items.get(item_id)
+        if isinstance(item, QGraphicsTextItem):
+            item.setFont(font)
+            if self.edit_mode == "template":
+                cfg = self.layout.setdefault("items", {}).setdefault(item_id, {})
+                cfg.setdefault("font", {})
+                cfg["font"].update(
+                    {
+                        "family": font.family(),
+                        "size": font.pointSize(),
+                        "bold": font.bold(),
+                        "italic": font.italic(),
+                        "underline": font.underline(),
+                    }
+                )
 
     # ------------------------------------------------------------------
-    def _create_icon_item(
-        self, name: str, pos: tuple[float, float], size: tuple[int, int] = (32, 32)
-    ) -> Optional[QGraphicsPixmapItem]:
-        icon_path = resource_path("icons", f"{name}.png")
-        if not os.path.exists(icon_path):
-            return None
-
-        pixmap = QPixmap(icon_path)
-        if not pixmap.isNull() and size:
-            pixmap = pixmap.scaled(*size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-
-        icon_item = QGraphicsPixmapItem(pixmap)
-        icon_item.setTransformationMode(Qt.SmoothTransformation)
-        icon_item.setPos(*pos)
-        icon_item.setZValue(3)
-        self._scene.addItem(icon_item)
-        self._make_item_interactive(icon_item)
-        return icon_item
+    def update_text_color(self, item_id: str, color: QColor):
+        item = self.scene_items.get(item_id)
+        if isinstance(item, QGraphicsTextItem):
+            item.setDefaultTextColor(color)
+            if self.edit_mode == "template":
+                cfg = self.layout.setdefault("items", {}).setdefault(item_id, {})
+                cfg["color"] = color.name(QColor.HexArgb)
 
     # ------------------------------------------------------------------
-    def _make_item_interactive(
-        self, item: QGraphicsItem, *, editable_text: bool = False
-    ) -> None:
-        item.setFlag(QGraphicsItem.ItemIsMovable, True)
-        item.setFlag(QGraphicsItem.ItemIsSelectable, True)
-        item.setFlag(QGraphicsItem.ItemIsFocusable, True)
-        if editable_text and isinstance(item, QGraphicsTextItem):
-            item.setTextInteractionFlags(Qt.TextEditorInteraction)
+    def update_item_opacity(self, item_id: str, opacity: float):
+        item = self.scene_items.get(item_id)
+        if item:
+            item.setOpacity(opacity)
+            if self.edit_mode == "template":
+                cfg = self.layout.setdefault("items", {}).setdefault(item_id, {})
+                cfg["opacity"] = opacity
 
+    # ------------------------------------------------------------------
+    def update_item_size(self, item_id: str, size: Tuple[float, float]):
+        item = self.scene_items.get(item_id)
+        if isinstance(item, QGraphicsRectItem):
+            rect = QRectF(0, 0, size[0], size[1])
+            item.setRect(rect)
+        if isinstance(item, QGraphicsPixmapItem) and not item.pixmap().isNull():
+            scaled = item.pixmap().scaled(size[0], size[1], Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            item.setPixmap(scaled)
+        if self.edit_mode == "template":
+            cfg = self.layout.setdefault("items", {}).setdefault(item_id, {})
+            cfg.setdefault("size", {})
+            cfg["size"].update({"w": size[0], "h": size[1]})
+
+    # ------------------------------------------------------------------
+    def update_item_position(self, item_id: str, pos: Tuple[float, float]):
+        item = self.scene_items.get(item_id)
+        if not item:
+            return
+        item.setPos(pos[0], pos[1])
+        if self.edit_mode == "template":
+            cfg = self.layout.setdefault("items", {}).setdefault(item_id, {})
+            cfg.setdefault("pos", {})
+            cfg["pos"].update({"x": pos[0], "y": pos[1]})
+            bindings = cfg.get("bindings", {})
+            if bindings.get("relative"):
+                anchor = bindings.setdefault("anchor", {})
+                anchor["x"] = pos[0] / max(1.0, self.card_size.width())
+                anchor["y"] = pos[1] / max(1.0, self.card_size.height())
+
+    # ------------------------------------------------------------------
+    def apply_outline(self, item_id: str, color: QColor, width: float):
+        item = self.scene_items.get(item_id)
+        if not isinstance(item, QGraphicsTextItem):
+            return
+        effect = QGraphicsDropShadowEffect()
+        effect.setOffset(0, 0)
+        effect.setBlurRadius(max(0.0, width * 2))
+        effect.setColor(color)
+        item.setGraphicsEffect(effect)
+        if self.edit_mode == "template":
+            cfg = self.layout.setdefault("items", {}).setdefault(item_id, {})
+            cfg.setdefault("shadow", {})
+            cfg["shadow"].update({"color": color.name(QColor.HexArgb), "blur": max(0.0, width * 2), "offset": [0, 0]})
+
+    # ------------------------------------------------------------------
+    def change_icon_source(self, item_id: str, asset_path: str):
+        item = self.scene_items.get(item_id)
+        if not isinstance(item, QGraphicsPixmapItem):
+            return
+        pix = QPixmap(asset_path)
+        if pix.isNull():
+            return
+        size = self.layout.get("items", {}).get(item_id, {}).get("size")
+        if size:
+            pix = pix.scaled(size.get("w", pix.width()), size.get("h", pix.height()), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        item.setPixmap(pix)
+        if self.edit_mode == "template":
+            cfg = self.layout.setdefault("items", {}).setdefault(item_id, {})
+            cfg["asset"] = asset_path
+
+    # ------------------------------------------------------------------
+    def get_item_config(self, item_id: str) -> dict:
+        cfg = copy.deepcopy(self.layout.get("items", {}).get(item_id, {}))
+        item = self.scene_items.get(item_id)
+        if item:
+            cfg.setdefault("pos", {})
+            cfg["pos"].update({"x": item.pos().x(), "y": item.pos().y()})
+            cfg["z"] = item.zValue()
+            cfg["opacity"] = item.opacity()
+            if isinstance(item, QGraphicsTextItem):
+                cfg["text"] = item.toPlainText()
+                cfg.setdefault("font", {})
+                cfg["font"].update(
+                    {
+                        "family": item.font().family(),
+                        "size": item.font().pointSize(),
+                        "bold": item.font().bold(),
+                        "italic": item.font().italic(),
+                        "underline": item.font().underline(),
+                    }
+                )
+                cfg["color"] = item.defaultTextColor().name(QColor.HexArgb)
+                if item.textWidth() > 0:
+                    cfg["text_width"] = item.textWidth()
+            if isinstance(item, QGraphicsPixmapItem) and not item.pixmap().isNull():
+                cfg.setdefault("size", {})
+                cfg["size"].update({"w": item.pixmap().width(), "h": item.pixmap().height()})
+            bindings = cfg.get("bindings", {})
+            if bindings.get("relative"):
+                width = max(1.0, self.card_size.width())
+                height = max(1.0, self.card_size.height())
+                anchor = bindings.setdefault("anchor", {})
+                anchor["x"] = item.pos().x() / width
+                anchor["y"] = item.pos().y() / height
+        return cfg
+
+    # ------------------------------------------------------------------
+    def update_item_zvalue(self, item_id: str, z_value: float):
+        item = self.scene_items.get(item_id)
+        if not item:
+            return
+        item.setZValue(z_value)
+        if self.edit_mode == "template":
+            cfg = self.layout.setdefault("items", {}).setdefault(item_id, {})
+            cfg["z"] = z_value
+
+    # ------------------------------------------------------------------
+    def set_axis_lock(self, item_id: str, lock_x: Optional[bool] = None, lock_y: Optional[bool] = None):
+        if self.edit_mode != "template":
+            return
+        cfg = self.layout.setdefault("items", {}).setdefault(item_id, {})
+        bindings = cfg.setdefault("bindings", {})
+        if lock_x is not None:
+            bindings["lock_x"] = lock_x
+        if lock_y is not None:
+            bindings["lock_y"] = lock_y
+
+    # ------------------------------------------------------------------
+    def set_item_locked(self, item_id: str, locked: bool):
+        item = self.scene_items.get(item_id)
+        if not item:
+            return
+        item.setFlag(QGraphicsItem.ItemIsMovable, not (locked or self.template_locked))
+        if self.edit_mode == "template":
+            cfg = self.layout.setdefault("items", {}).setdefault(item_id, {})
+            cfg["locked"] = locked
+
+    # ------------------------------------------------------------------
+    def apply_shadow(self, item_id: str, color: QColor, offset: Tuple[float, float], blur: float):
+        item = self.scene_items.get(item_id)
+        if not isinstance(item, QGraphicsTextItem):
+            return
+        effect = QGraphicsDropShadowEffect()
+        effect.setColor(color)
+        effect.setOffset(offset[0], offset[1])
+        effect.setBlurRadius(blur)
+        item.setGraphicsEffect(effect)
+        if self.edit_mode == "template":
+            cfg = self.layout.setdefault("items", {}).setdefault(item_id, {})
+            cfg.setdefault("shadow", {})
+            cfg["shadow"].update({"color": color.name(QColor.HexArgb), "offset": [offset[0], offset[1]], "blur": blur})
+
+    # ------------------------------------------------------------------
+    def get_layout_path(self) -> str:
+        return self.layout_path

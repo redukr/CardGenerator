@@ -1,49 +1,48 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-import os
+import sys
+from PyInstaller.utils.hooks import collect_submodules
 
-# Папка проєкту — там, де лежить main.py
-project_path = os.path.dirname(os.path.abspath('main.py'))
+# Основний файл програми
+main_script = 'main.py'
 
-block_cipher = None
+# Збір усіх необхідних PySide6 модулів
+hidden_imports = collect_submodules('PySide6')
+
+# Включення ресурсів у збірку
+datas = [
+    ('icons/*.png', 'icons'),
+    ('frames/*.png', 'frames'),
+    ('fonts/*.ttf', 'fonts'),
+    ('decks/*.json', 'decks'),
+    ('editor/*.json', 'editor'),
+    ('template.json', '.'),
+    ('config.json', '.'),
+    ('ui/styles.qss', 'ui'),
+]
 
 a = Analysis(
-    ['main.py'],
-    pathex=[project_path],
+    [main_script],
+    pathex=['.'],
     binaries=[],
-    datas=[
-        (os.path.join(project_path, 'ui'), 'ui'),
-        (os.path.join(project_path, 'frames'), 'frames'),
-        (os.path.join(project_path, 'icons'), 'icons'),
-        (os.path.join(project_path, 'fonts'), 'fonts'),
-        (os.path.join(project_path, 'template.json'), '.'),
-    ],
-    hiddenimports=[],
-    hookspath=[],
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=[],
+    datas=datas,
+    hiddenimports=hidden_imports,
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
     a.scripts,
-    [],
-    exclude_binaries=True,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
     name='CardGenerator',
     debug=False,
     strip=False,
     upx=False,
-    console=False,
+    console=False,  # Вікна консолі не буде
+    icon=None
 )
 
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    name='CardGenerator'
-)

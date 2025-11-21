@@ -7,6 +7,7 @@ echo ===============================
 
 echo.
 echo --- Очистка старих збірок ---
+echo.
 
 IF EXIST dist (
     echo Видаляю dist...
@@ -27,7 +28,7 @@ echo.
 echo --- Запуск PyInstaller ---
 echo.
 
-"..\python310\python.exe" -m PyInstaller CardGenerator.spec
+"C:\Users\GDF\AppData\Local\Programs\Python\Python310\python.exe" -m PyInstaller CardGenerator.spec
 
 echo.
 echo ===============================
