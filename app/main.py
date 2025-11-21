@@ -18,8 +18,20 @@ def _setup_logger() -> logging.Logger:
     logger = logging.getLogger("card_generator")
     logger.setLevel(logging.INFO)
     if not logger.handlers:
-        handler = logging.FileHandler(APP_LOG_PATH, encoding="utf-8")
         formatter = logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s")
+        try:
+            APP_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            handler = logging.FileHandler(APP_LOG_PATH, encoding="utf-8")
+        except (OSError, PermissionError) as exc:
+            handler = logging.StreamHandler()
+            handler.setLevel(logging.INFO)
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+            logger.propagate = False
+            logger.warning(
+                "File logging disabled; could not open %s: %s", APP_LOG_PATH, exc
+            )
+            return logger
         handler.setFormatter(formatter)
         logger.addHandler(handler)
     logger.propagate = False
