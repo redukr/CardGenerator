@@ -3,6 +3,7 @@ from PySide6.QtGui import *
 from PySide6.QtWidgets import *
 
 from widgets.card_scene_view import CardSceneView
+from widgets.property_panel import PropertyPanel
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -71,11 +72,17 @@ class Ui_MainWindow(object):
         # Додаємо ліву панель
         self.mainLayout.addLayout(self.leftPanel, 0)
 
-        # === Права зона (майбутнє превʼю або шаблон-редактор) ===
-        self.rightPanel = QVBoxLayout()
+        # === Права зона (редактор + властивості) ===
+        self.rightPanel = QHBoxLayout()
+        self.rightPanel.setSpacing(15)
 
         self.sceneView = CardSceneView()
-        self.rightPanel.addWidget(self.sceneView)
+        self.rightPanel.addWidget(self.sceneView, 4)
+
+        self.propertyPanel = PropertyPanel()
+        self.propertyPanel.setFixedWidth(280)
+        self.rightPanel.addWidget(self.propertyPanel, 1)
+
         self.mainLayout.addLayout(self.rightPanel, 1)
 
         # ==== Завершення ====

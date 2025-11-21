@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Dict, Optional
 
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QRectF, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QPen,
@@ -71,6 +71,8 @@ class TemplateBlockItem(QGraphicsRectItem):
 class CardSceneView(QGraphicsView):
     """QGraphicsView-based preview/editor for card templates."""
 
+    itemSelected = Signal(object)
+
     def __init__(self, template_path: Optional[str] = None, parent=None):
         super().__init__(parent)
 
@@ -113,8 +115,20 @@ class CardSceneView(QGraphicsView):
         self._zoom = 0
         self._fit_in_view_pending = True
 
+        self._scene.selectionChanged.connect(self._on_selection_changed)
+
         if template_path:
             self.load_template(template_path)
+
+    # ------------------------------------------------------------------
+    def _emit_selected_item(self):
+        selected = self._scene.selectedItems()
+        item = selected[0] if selected else None
+        self.itemSelected.emit(item)
+
+    # ------------------------------------------------------------------
+    def _on_selection_changed(self):
+        self._emit_selected_item()
 
     # ------------------------------------------------------------------
     def apply_card_data(self, card: dict, deck_color: str):
@@ -182,6 +196,16 @@ class CardSceneView(QGraphicsView):
             event.accept()
             return
         super().wheelEvent(event)
+
+    # ------------------------------------------------------------------
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        self._emit_selected_item()
+
+    # ------------------------------------------------------------------
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        self._emit_selected_item()
 
     # ------------------------------------------------------------------
     def drawBackground(self, painter: QPainter, rect: QRectF):
