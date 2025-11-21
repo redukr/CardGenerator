@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -17,13 +17,16 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPlainTextEdit,
     QPushButton,
     QSlider,
     QSpinBox,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from core.paths import application_base_dir
 from .card_scene_view import CardSceneView
 
 
@@ -190,6 +193,8 @@ class PropertyPanel(QWidget):
         shadow_layout.addRow("Blur", self.shadow_blur)
         self.layout.addWidget(shadow_group)
 
+        self._setup_log_viewers()
+
         self.scene_view.selectionChanged.connect(self._on_item_selected)
         self.scene_view.itemUpdated.connect(self._on_item_updated)
         self.scene_view.layoutLoaded.connect(self._on_layout_loaded)
@@ -197,6 +202,91 @@ class PropertyPanel(QWidget):
         self._current_outline_color = QColor("#FFFFFF")
         self._current_font_color = QColor("#FFFFFF")
         self._current_shadow_color = QColor("#000000")
+
+    # ------------------------------------------------------------------
+    def _setup_log_viewers(self) -> None:
+        self.error_log_path = application_base_dir() / "error.txt"
+        self.app_log_path = application_base_dir() / "application.log"
+
+        log_group = QGroupBox("Вивід консолі")
+        log_layout = QVBoxLayout(log_group)
+
+        self.log_tabs = QTabWidget()
+        self.log_tabs.currentChanged.connect(self._refresh_logs)
+
+        # Error log tab
+        error_tab = QWidget()
+        error_layout = QVBoxLayout(error_tab)
+        self.chk_error_realtime = QCheckBox("Вести лог в реальному часі")
+        self.chk_error_realtime.toggled.connect(self._toggle_realtime_logging)
+        self.error_log_view = QPlainTextEdit()
+        self.error_log_view.setReadOnly(True)
+        self.error_log_view.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.error_log_view.setStyleSheet("font-family: Consolas, 'Courier New', monospace;")
+        error_layout.addWidget(self.chk_error_realtime)
+        error_layout.addWidget(self.error_log_view)
+        self.log_tabs.addTab(error_tab, "Error log")
+
+        # Application log tab
+        app_tab = QWidget()
+        app_layout = QVBoxLayout(app_tab)
+        self.chk_app_realtime = QCheckBox("Вести лог в реальному часі")
+        self.chk_app_realtime.toggled.connect(self._toggle_realtime_logging)
+        self.app_log_view = QPlainTextEdit()
+        self.app_log_view.setReadOnly(True)
+        self.app_log_view.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.app_log_view.setStyleSheet("font-family: Consolas, 'Courier New', monospace;")
+        app_layout.addWidget(self.chk_app_realtime)
+        app_layout.addWidget(self.app_log_view)
+        self.log_tabs.addTab(app_tab, "Лог програми")
+
+        log_layout.addWidget(self.log_tabs)
+        self.layout.addWidget(log_group)
+
+        self.log_timer = QTimer(self)
+        self.log_timer.setInterval(1000)
+        self.log_timer.timeout.connect(self._refresh_logs)
+
+        self._load_logs_once()
+
+    # ------------------------------------------------------------------
+    def _load_logs_once(self) -> None:
+        self._update_log_view(self.error_log_path, self.error_log_view)
+        self._update_log_view(self.app_log_path, self.app_log_view)
+
+    # ------------------------------------------------------------------
+    def _toggle_realtime_logging(self):
+        if self.chk_error_realtime.isChecked():
+            self._update_log_view(self.error_log_path, self.error_log_view)
+        if self.chk_app_realtime.isChecked():
+            self._update_log_view(self.app_log_path, self.app_log_view)
+
+        if self.chk_error_realtime.isChecked() or self.chk_app_realtime.isChecked():
+            if not self.log_timer.isActive():
+                self.log_timer.start()
+        else:
+            self.log_timer.stop()
+
+    # ------------------------------------------------------------------
+    def _refresh_logs(self):
+        if self.chk_error_realtime.isChecked():
+            self._update_log_view(self.error_log_path, self.error_log_view)
+        if self.chk_app_realtime.isChecked():
+            self._update_log_view(self.app_log_path, self.app_log_view)
+
+    # ------------------------------------------------------------------
+    def _update_log_view(self, path, widget: QPlainTextEdit) -> None:
+        widget.setPlainText(self._read_log_file(path))
+        widget.verticalScrollBar().setValue(widget.verticalScrollBar().maximum())
+
+    # ------------------------------------------------------------------
+    def _read_log_file(self, path) -> str:
+        try:
+            return path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return "Файл журналу не знайдено."
+        except Exception as exc:  # pragma: no cover - UI helper
+            return f"Не вдалося прочитати лог: {exc}"
 
     # ------------------------------------------------------------------
     def _on_layout_loaded(self, layout_dict: dict):
