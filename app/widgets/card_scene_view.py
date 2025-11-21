@@ -482,6 +482,12 @@ class CardSceneView(QGraphicsView):
     def apply_card_data(self, card: dict, deck_color: str):
         if not card:
             return
+
+        if not self._preview_item:
+            self._preview_item = QGraphicsPixmapItem(pixmap)
+            self._preview_item.setTransformationMode(Qt.SmoothTransformation)
+            self._preview_item.setZValue(20)
+            self._scene.addItem(self._preview_item)
         self._deck_color = QColor(deck_color) if QColor.isValidColor(deck_color) else QColor("#FFFFFF")
         # Textual content
         self._set_text("title", card.get("name", ""), persist=False)
