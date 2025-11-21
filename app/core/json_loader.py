@@ -1,5 +1,9 @@
 import json
 import os
+from typing import List
+
+from .models import CardModel, DeckModel
+
 
 class JSONLoader:
     def __init__(self, deck_path):
@@ -7,7 +11,7 @@ class JSONLoader:
         self.deck_folder = os.path.dirname(deck_path)
         self.data = None
 
-    def load(self):
+    def load(self) -> DeckModel:
         if not os.path.exists(self.deck_path):
             raise FileNotFoundError(f"JSON deck not found: {self.deck_path}")
 
@@ -15,7 +19,17 @@ class JSONLoader:
             self.data = json.load(f)
 
         self.normalize()
-        return self.data
+        deck_name = os.path.splitext(os.path.basename(self.deck_path))[0]
+        cards: List[CardModel] = [CardModel(index=i, payload=card) for i, card in enumerate(self.data["cards"])]
+
+        return DeckModel(
+            name=deck_name,
+            path=self.deck_path,
+            deck_color=self.data.get("deck_color", "#FFFFFF"),
+            cards=cards,
+            prompts=self.data.get("prompts", {}),
+            metadata={k: v for k, v in self.data.items() if k not in {"cards", "deck_color", "prompts"}},
+        )
 
     # ─────────────────────────────────────────────
     # Нормалізація карт
