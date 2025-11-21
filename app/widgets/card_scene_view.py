@@ -124,6 +124,8 @@ class CardSceneView(QGraphicsView):
     itemUpdated = Signal(str, dict)
     layoutLoaded = Signal(dict)
 
+    itemSelected = Signal(object)
+
     def __init__(self, template_path: Optional[str] = None, parent=None):
         super().__init__(parent)
 
@@ -169,6 +171,25 @@ class CardSceneView(QGraphicsView):
         self._scene.setSceneRect(-400, -400, 1600, 2400)
         self._fit_scheduled = True
 
+        self._scene.selectionChanged.connect(self._on_selection_changed)
+
+        if template_path:
+            self.load_template(template_path)
+
+    # ------------------------------------------------------------------
+    def _emit_selected_item(self):
+        selected = self._scene.selectedItems()
+        item = selected[0] if selected else None
+        self.itemSelected.emit(item)
+
+    # ------------------------------------------------------------------
+    def _on_selection_changed(self):
+        self._emit_selected_item()
+
+    # ------------------------------------------------------------------
+    def apply_card_data(self, card: dict, deck_color: str):
+        """Populate scene items using card data from JSON."""
+        if not card:
         if not os.path.exists(self.layout_path):
             self._ensure_default_layout()
         self.load_template(self.layout_path)
@@ -396,6 +417,22 @@ class CardSceneView(QGraphicsView):
         self.edit_mode = mode
 
     # ------------------------------------------------------------------
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        self._emit_selected_item()
+
+    # ------------------------------------------------------------------
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        self._emit_selected_item()
+
+    # ------------------------------------------------------------------
+    def drawBackground(self, painter: QPainter, rect: QRectF):
+        painter.fillRect(rect, QColor(26, 26, 26))
+
+        grid_size = 50
+        left = int(rect.left()) - (int(rect.left()) % grid_size)
+        top = int(rect.top()) - (int(rect.top()) % grid_size)
     def _handle_item_selected(self, item: QGraphicsItem):
         item_id = self._lookup_item_id(item)
         if item_id:
@@ -445,6 +482,12 @@ class CardSceneView(QGraphicsView):
     def apply_card_data(self, card: dict, deck_color: str):
         if not card:
             return
+
+        if not self._preview_item:
+            self._preview_item = QGraphicsPixmapItem(pixmap)
+            self._preview_item.setTransformationMode(Qt.SmoothTransformation)
+            self._preview_item.setZValue(20)
+            self._scene.addItem(self._preview_item)
         self._deck_color = QColor(deck_color) if QColor.isValidColor(deck_color) else QColor("#FFFFFF")
         # Textual content
         self._set_text("title", card.get("name", ""), persist=False)
