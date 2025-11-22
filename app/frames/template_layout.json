@@ -1,0 +1,255 @@
+{
+    "meta": {
+        "width": 744,
+        "height": 1038,
+        "dpi": 300,
+        "grid": 25,
+        "snap": 4,
+        "background": "#ff94a8b1"
+    },
+    "items": {
+        "artwork": {
+            "type": "image",
+            "pos": {
+                "x": 46.153775743707115,
+                "y": 474.93098398169326
+            },
+            "size": {
+                "w": 309,
+                "h": 100
+            },
+            "opacity": 1.0,
+            "z": 1.0,
+            "locked": false,
+            "bindings": {
+                "relative": true,
+                "anchor": {
+                    "x": 0.15,
+                    "y": 0.14
+                }
+            },
+            "asset": null
+        },
+        "title": {
+            "type": "text",
+            "text": "Екіпаж БТР-3",
+            "pos": {
+                "x": 59.52,
+                "y": 43.52
+            },
+            "font": {
+                "family": "Montserrat",
+                "size": 32,
+                "bold": true,
+                "italic": false,
+                "underline": false
+            },
+            "color": "#ffffffff",
+            "text_width": 520.0,
+            "z": 6.0,
+            "bindings": {
+                "relative": true,
+                "anchor": {
+                    "x": 0.08,
+                    "y": 0.04192678227360309
+                }
+            },
+            "opacity": 1.0
+        },
+        "type": {
+            "type": "text",
+            "text": "UNIT",
+            "pos": {
+                "x": 59.52,
+                "y": 93.42
+            },
+            "font": {
+                "family": "Montserrat",
+                "size": 20,
+                "bold": true,
+                "italic": false,
+                "underline": false
+            },
+            "color": "#fff7d56e",
+            "z": 6.0,
+            "bindings": {
+                "relative": true,
+                "anchor": {
+                    "x": 0.08,
+                    "y": 0.09
+                }
+            },
+            "opacity": 1.0
+        },
+        "description": {
+            "type": "text",
+            "text": "",
+            "pos": {
+                "x": 59.52,
+                "y": 519.0
+            },
+            "font": {
+                "family": "Montserrat",
+                "size": 18,
+                "bold": false,
+                "italic": false,
+                "underline": false
+            },
+            "color": "#ffffffff",
+            "text_width": 520.0,
+            "z": 6.0,
+            "bindings": {
+                "relative": true,
+                "anchor": {
+                    "x": 0.08,
+                    "y": 0.5
+                }
+            },
+            "opacity": 1.0
+        },
+        "cost": {
+            "type": "text",
+            "text": "2",
+            "pos": {
+                "x": 308.23798627002293,
+                "y": 125.62471395881008
+            },
+            "font": {
+                "family": "Montserrat",
+                "size": 28,
+                "bold": true,
+                "italic": false,
+                "underline": false
+            },
+            "color": "#ffffffff",
+            "z": 6.0,
+            "opacity": 1.0
+        },
+        "cost_type": {
+            "type": "text",
+            "text": "LOG",
+            "pos": {
+                "x": 284.43935926773463,
+                "y": 179.90389016018304
+            },
+            "font": {
+                "family": "Montserrat",
+                "size": 20,
+                "bold": false,
+                "italic": false,
+                "underline": false
+            },
+            "color": "#fff7d56e",
+            "z": 6.0,
+            "opacity": 1.0
+        },
+        "stat_atk": {
+            "type": "text",
+            "text": "ATK 3",
+            "pos": {
+                "x": 51.44164759725399,
+                "y": 480.5949656750571
+            },
+            "font": {
+                "family": "Montserrat",
+                "size": 20,
+                "bold": true,
+                "italic": false,
+                "underline": false
+            },
+            "color": "#ffffffff",
+            "z": 6.0,
+            "opacity": 1.0
+        },
+        "stat_def": {
+            "type": "text",
+            "text": "DEF 2",
+            "pos": {
+                "x": 55.01144164759725,
+                "y": 518.2151029748284
+            },
+            "font": {
+                "family": "UAF Sans",
+                "size": 20,
+                "bold": true,
+                "italic": false,
+                "underline": false
+            },
+            "color": "#ffffffff",
+            "z": 6.0,
+            "opacity": 1.0
+        },
+        "stat_stb": {
+            "type": "text",
+            "text": "STB 4",
+            "pos": {
+                "x": 144.2562929061785,
+                "y": 482.0594965675057
+            },
+            "font": {
+                "family": "Montserrat",
+                "size": 20,
+                "bold": true,
+                "italic": false,
+                "underline": false
+            },
+            "color": "#ffffffff",
+            "z": 6.0,
+            "opacity": 1.0
+        },
+        "stat_init": {
+            "type": "text",
+            "text": "INIT 2",
+            "pos": {
+                "x": 144.25629290617852,
+                "y": 528.0091533180779
+            },
+            "font": {
+                "family": "UAF Sans",
+                "size": 20,
+                "bold": true,
+                "italic": false,
+                "underline": false
+            },
+            "color": "#ffffffff",
+            "z": 6.0,
+            "opacity": 1.0
+        },
+        "stat_rng": {
+            "type": "text",
+            "text": "RNG 2",
+            "pos": {
+                "x": 241.83066361556067,
+                "y": 484.71395881006856
+            },
+            "font": {
+                "family": "Montserrat",
+                "size": 20,
+                "bold": true,
+                "italic": false,
+                "underline": false
+            },
+            "color": "#ffffffff",
+            "z": 6.0,
+            "opacity": 1.0
+        },
+        "stat_move": {
+            "type": "text",
+            "text": "MOVE 1",
+            "pos": {
+                "x": 237.07093821510296,
+                "y": 525.9038901601831
+            },
+            "font": {
+                "family": "Montserrat",
+                "size": 20,
+                "bold": true,
+                "italic": false,
+                "underline": false
+            },
+            "color": "#ffffffff",
+            "z": 6.0,
+            "opacity": 1.0
+        }
+    }
+}
