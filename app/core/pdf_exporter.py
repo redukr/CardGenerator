@@ -20,9 +20,9 @@ class PDFExporter:
         if not os.path.isdir(folder):
             raise FileNotFoundError(f"Директорію не знайдено: {folder}")
 
-        # Збираємо всі PNG-файли
+        # Збираємо всі PNG-файли у стабільному порядку
         image_paths = []
-        for f in os.listdir(folder):
+        for f in sorted(os.listdir(folder)):
             if f.lower().endswith(".png"):
                 full_path = os.path.join(folder, f)
                 if os.path.isfile(full_path):
@@ -35,8 +35,8 @@ class PDFExporter:
         page_width, page_height = A4
         margin = self.margin_mm * mm
 
-        card_w_pt = card_width_mm * mm
-        card_h_pt = card_height_mm * mm
+        card_w_pt = (card_width_mm + 2 * bleed_mm) * mm
+        card_h_pt = (card_height_mm + 2 * bleed_mm) * mm
 
         # Готуємо PDF
         from reportlab.pdfgen import canvas
@@ -55,7 +55,7 @@ class PDFExporter:
         for img_path in image_paths:
             temp_img = Image.open(img_path)
             temp_img_path = img_path + "_tmp_for_pdf.png"
-            temp_img.save(temp_img_path, dpi=(300, 300))
+            temp_img.save(temp_img_path, dpi=(self.dpi, self.dpi))
 
             c.drawImage(
                 temp_img_path,
